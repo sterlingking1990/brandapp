@@ -19,7 +19,10 @@ import {
   ExternalLink,
   PlayCircle,
   X,
-  AlertCircle
+  AlertCircle,
+  Paperclip,
+  Smile,
+  Mic
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MediaCarouselModal from '@/components/MediaCarouselModal'
@@ -51,7 +54,6 @@ export default function ChatMessagesPage() {
     if (selectedChatId) {
       fetchMessages(selectedChatId)
       
-      // Subscribe to real-time messages for this chat
       const channel = supabase
         .channel(`chat:${selectedChatId}`)
         .on(
@@ -65,8 +67,7 @@ export default function ChatMessagesPage() {
           (payload) => {
             const newMsg = payload.new
             setMessages(prev => {
-              const exists = prev.some(m => m.id === newMsg.id)
-              if (exists) return prev
+              if (prev.some(m => m.id === newMsg.id)) return prev
               return [...prev, newMsg]
             })
           }
@@ -84,7 +85,7 @@ export default function ChatMessagesPage() {
   }, [messages])
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
   }
 
   const fetchInitialData = async () => {
@@ -97,7 +98,6 @@ export default function ChatMessagesPage() {
       }
       setCurrentUser(user)
 
-      // Fetch chats where brand_id = user.id
       const { data: chatsData, error } = await supabase
         .from('chats')
         .select(`
@@ -113,7 +113,6 @@ export default function ChatMessagesPage() {
 
       if (error) throw error
 
-      // Enrich with last message
       const chatIds = chatsData.map(c => c.id)
       const { data: lastMessages } = await supabase
         .from('messages')
@@ -135,7 +134,6 @@ export default function ChatMessagesPage() {
 
       setChats(enrichedChats)
 
-      // Auto-select chat from URL if present
       const urlChatId = searchParams.get('id')
       if (urlChatId) {
         setSelectedChatId(urlChatId)
@@ -168,14 +166,13 @@ export default function ChatMessagesPage() {
     }
   }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!newMessage.trim() || !selectedChatId || !currentUser) return
 
     const msgContent = newMessage.trim()
     setNewMessage('')
 
-    // Optimistic update
     const tempId = `temp-${Date.now()}`
     const optimisticMsg = {
       id: tempId,
@@ -195,10 +192,8 @@ export default function ChatMessagesPage() {
 
       if (error) throw error
 
-      // Remove optimistic flag on success (or let real-time update handle it)
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, is_optimistic: false } : m))
       
-      // Update last message in chat list
       setChats(prev => prev.map(c => 
         c.id === selectedChatId 
         ? { ...c, last_message: msgContent, last_message_time: new Date().toISOString(), is_own_last: true } 
@@ -252,7 +247,7 @@ export default function ChatMessagesPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white">
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-white">
          <Loader2 className="animate-spin text-brand" size={40} />
          <p className="text-gray-400 font-bold uppercase tracking-widest mt-4 text-[10px]">Connecting to secure chat...</p>
       </div>
@@ -260,13 +255,13 @@ export default function ChatMessagesPage() {
   }
 
   return (
-    <div className="flex-1 flex h-screen overflow-hidden bg-white">
+    <div className="flex flex-1 h-[100vh] max-h-screen overflow-hidden bg-white">
       {/* Sidebar: Chat List */}
-      <div className="w-full md:w-[350px] lg:w-[400px] flex flex-col border-r border-gray-100 h-full bg-white">
-        <header className="p-6 border-b border-gray-100 space-y-4">
+      <div className="w-full md:w-[350px] lg:w-[400px] flex flex-col border-r border-gray-100 h-full bg-white relative z-10">
+        <header className="p-6 border-b border-gray-100 space-y-4 shrink-0">
            <div className="flex items-center justify-between">
               <h1 className="text-2xl font-black text-gray-900 tracking-tight">Messages</h1>
-              <div className="h-10 w-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-bold">
+              <div className="h-8 px-3 rounded-xl bg-brand/10 text-brand flex items-center justify-center text-xs font-black">
                  {chats.length}
               </div>
            </div>
@@ -277,7 +272,7 @@ export default function ChatMessagesPage() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search conversations..."
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-brand outline-none transition-all text-sm"
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-brand outline-none transition-all text-sm"
               />
            </div>
         </header>
@@ -287,22 +282,22 @@ export default function ChatMessagesPage() {
              <button
                key={chat.id}
                onClick={() => setSelectedChatId(chat.id)}
-               className={`w-full flex items-center gap-4 p-4 transition-all border-b border-gray-50/50 ${selectedChatId === chat.id ? 'brand-gradient-soft border-l-4 border-l-brand' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}
+               className={`w-full flex items-center gap-4 p-4 transition-all border-b border-gray-50/50 ${selectedChatId === chat.id ? 'bg-brand/5 border-l-4 border-l-brand' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}
              >
-                <div className="relative">
-                   <div className="h-14 w-14 rounded-2xl overflow-hidden border border-gray-100 bg-gray-100">
+                <div className="relative shrink-0">
+                   <div className="h-12 w-12 rounded-2xl overflow-hidden border border-gray-100 bg-gray-100">
                       <img 
                         src={chat.influencer_profile?.avatar_url || `https://ui-avatars.com/api/?name=${chat.influencer_profile?.full_name}&background=random`} 
                         className="h-full w-full object-cover"
                         alt=""
                       />
                    </div>
-                   <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-emerald-500 rounded-full border-2 border-white" />
+                   <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 bg-emerald-500 rounded-full border-2 border-white" />
                 </div>
                 <div className="flex-1 text-left min-w-0">
-                   <div className="flex justify-between items-center mb-1">
-                      <p className="font-bold text-gray-900 truncate">{chat.influencer_profile?.full_name}</p>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">{formatTime(chat.last_message_time)}</span>
+                   <div className="flex justify-between items-center mb-0.5">
+                      <p className="font-bold text-gray-900 truncate text-sm">{chat.influencer_profile?.full_name}</p>
+                      <span className="text-[9px] font-bold text-gray-400 uppercase">{formatTime(chat.last_message_time)}</span>
                    </div>
                    <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-brand font-medium' : 'text-gray-500'}`}>
                       {chat.is_own_last ? 'You: ' : ''}{chat.last_message}
@@ -319,13 +314,13 @@ export default function ChatMessagesPage() {
       </div>
 
       {/* Main Chat Window */}
-      <div className="flex-1 flex flex-col h-full bg-gray-50 relative">
+      <div className="flex-1 flex flex-col h-full bg-gray-50 relative overflow-hidden">
         {selectedChat ? (
           <>
             {/* Chat Header */}
-            <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between sticky top-0 z-10">
+            <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between shrink-0 relative z-10">
                <div className="flex items-center gap-4">
-                  <div className="h-11 w-11 rounded-xl overflow-hidden border border-gray-100 bg-gray-100">
+                  <div className="h-11 w-11 rounded-xl overflow-hidden border border-gray-100 bg-gray-100 shrink-0">
                      <img 
                         src={selectedChat.influencer_profile?.avatar_url || `https://ui-avatars.com/api/?name=${selectedChat.influencer_profile?.full_name}&background=random`} 
                         className="h-full w-full object-cover"
@@ -338,26 +333,26 @@ export default function ChatMessagesPage() {
                   </div>
                </div>
                <div className="flex items-center gap-2">
-                  <button className="h-11 w-11 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
-                     <Phone size={20} />
+                  <button className="h-10 w-10 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
+                     <Phone size={18} />
                   </button>
-                  <button className="h-11 w-11 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
-                     <Video size={20} />
+                  <button className="h-10 w-10 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
+                     <Video size={18} />
                   </button>
-                  <div className="w-px h-6 bg-gray-200 mx-2" />
-                  <button className="h-11 w-11 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
-                     <MoreVertical size={20} />
+                  <div className="w-px h-5 bg-gray-200 mx-1" />
+                  <button className="h-10 w-10 rounded-xl bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-all flex items-center justify-center border border-gray-100">
+                     <MoreVertical size={18} />
                   </button>
                </div>
             </header>
 
-            {/* Context Data Card (Unboxed / Challenge) */}
+            {/* Sticky Context Card */}
             {selectedChat.context_data && (
-               <div className="px-8 pt-6">
-                  <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center gap-6 relative overflow-hidden group">
-                     <div className="absolute top-0 right-0 w-32 h-full bg-brand/5 -skew-x-12 translate-x-16 group-hover:translate-x-12 transition-transform" />
+               <div className="px-8 pt-4 pb-2 shrink-0">
+                  <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden group">
+                     <div className="absolute top-0 right-0 w-24 h-full bg-brand/5 -skew-x-12 translate-x-12" />
                      
-                     <div className="h-16 w-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0 border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowPreview(true)}>
+                     <div className="h-12 w-12 bg-gray-100 rounded-xl overflow-hidden shrink-0 border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowPreview(true)}>
                         {selectedChat.context_data.media_url ? (
                           selectedChat.context_data.media_type === 'video' ? (
                             <div className="relative w-full h-full">
@@ -367,40 +362,40 @@ export default function ChatMessagesPage() {
                                  className="w-full h-full object-cover"
                                />
                                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                  <PlayCircle size={24} className="text-white fill-current" />
+                                  <PlayCircle size={16} className="text-white fill-current" />
                                </div>
                             </div>
                           ) : (
                             <img src={selectedChat.context_data.thumbnail_url || selectedChat.context_data.media_url} className="h-full w-full object-cover" />
                           )
                         ) : (
-                          <div className="h-full w-full flex items-center justify-center text-brand"><ShoppingBag size={24} /></div>
+                          <div className="h-full w-full flex items-center justify-center text-brand"><ShoppingBag size={20} /></div>
                         )}
                      </div>
 
-                     <div className="flex-1 space-y-1 cursor-pointer" onClick={() => setShowPreview(true)}>
+                     <div className="flex-1 space-y-0.5 cursor-pointer" onClick={() => setShowPreview(true)}>
                         <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-black text-brand uppercase tracking-widest">Ongoing Context</span>
+                           <span className="text-[9px] font-black text-brand uppercase tracking-widest">Context</span>
                            <div className="h-1 w-1 rounded-full bg-gray-300" />
-                           <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{selectedChat.type === 'unboxed' ? 'Referral Partnership' : 'Challenge Discussion'}</span>
+                           <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{selectedChat.type === 'unboxed' ? 'Referral Partnership' : 'Challenge Discussion'}</span>
                         </div>
-                        <h4 className="text-sm font-bold text-gray-900 leading-tight line-clamp-1">{selectedChat.context_data.status_title || selectedChat.context_data.caption}</h4>
+                        <h4 className="text-xs font-bold text-gray-900 leading-tight line-clamp-1">{selectedChat.context_data.status_title || selectedChat.context_data.caption}</h4>
                      </div>
 
                      {selectedChat.type === 'unboxed' && (
                         <button 
                            onClick={handleRecordSale}
                            disabled={isProcessingSale}
-                           className="px-6 py-2.5 bg-brand text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
+                           className="px-4 py-2 bg-brand text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg shadow-brand/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
                         >
-                           {isProcessingSale ? <Loader2 className="animate-spin" size={14} /> : 'Record Sale'}
+                           {isProcessingSale ? <Loader2 className="animate-spin" size={12} /> : 'Record Sale'}
                         </button>
                      )}
                   </div>
                </div>
             )}
 
-            {/* Messages List */}
+            {/* Scrollable Messages Area */}
             <div className="flex-1 overflow-y-auto p-8 space-y-4 scroll-smooth scrollbar-hide">
                {messagesLoading ? (
                   <div className="flex justify-center py-20">
@@ -410,8 +405,8 @@ export default function ChatMessagesPage() {
                  const isOwn = msg.sender_id === currentUser.id
                  return (
                    <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-1 duration-300`}>
-                      <div className={`max-w-[70%] space-y-1 ${isOwn ? 'items-end' : 'items-start'}`}>
-                         <div className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm ${isOwn ? 'bg-brand text-white rounded-br-lg' : 'bg-white text-gray-800 border border-gray-100 rounded-bl-lg'}`}>
+                      <div className={`max-w-[75%] space-y-1 ${isOwn ? 'items-end' : 'items-start'}`}>
+                         <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${isOwn ? 'bg-brand text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'}`}>
                             {msg.content}
                          </div>
                          <div className="flex items-center gap-2 px-1">
@@ -427,24 +422,38 @@ export default function ChatMessagesPage() {
                <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Bar */}
-            <div className="p-8 bg-white border-t border-gray-100">
-               <form onSubmit={handleSendMessage} className="flex items-center gap-4 bg-gray-50 p-2 pl-6 rounded-[2rem] border border-gray-100 focus-within:ring-2 focus-within:ring-brand/20 transition-all">
-                  <input 
-                    type="text"
-                    value={newMessage}
-                    onChange={e => setNewMessage(e.target.value)}
-                    placeholder="Type your response..."
-                    className="flex-1 bg-transparent py-3 text-sm text-gray-900 outline-none placeholder:text-gray-400"
-                  />
+            {/* Sticky Input Bar at Bottom */}
+            <div className="p-6 bg-white border-t border-gray-100 shrink-0">
+               <form 
+                  onSubmit={handleSendMessage} 
+                  className="flex items-end gap-3 max-w-5xl mx-auto"
+               >
+                  <div className="flex-1 flex items-end gap-2 bg-gray-50 p-2 pl-4 rounded-3xl border border-gray-100 focus-within:ring-2 focus-within:ring-brand/10 transition-all">
+                     <button type="button" className="p-2 text-gray-400 hover:text-brand transition-colors"><Paperclip size={20} /></button>
+                     <textarea 
+                        value={newMessage}
+                        onChange={e => setNewMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        rows={1}
+                        className="flex-1 bg-transparent py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 resize-none max-h-32"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSendMessage()
+                          }
+                        }}
+                     />
+                     <button type="button" className="p-2 text-gray-400 hover:text-brand transition-colors"><Smile size={20} /></button>
+                  </div>
                   <button 
                     type="submit"
                     disabled={!newMessage.trim()}
-                    className="h-12 w-12 bg-brand text-white rounded-full flex items-center justify-center shadow-lg shadow-brand/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:hover:scale-100"
+                    className="h-12 w-12 bg-brand text-white rounded-full flex items-center justify-center shadow-xl shadow-brand/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:hover:scale-100 disabled:shadow-none shrink-0"
                   >
                      <Send size={20} />
                   </button>
                </form>
+               <p className="text-[9px] text-gray-400 text-center mt-3 font-medium uppercase tracking-[0.2em]">End-to-End Encrypted</p>
             </div>
           </>
         ) : (
@@ -453,12 +462,12 @@ export default function ChatMessagesPage() {
                 <MessageSquare size={48} />
              </div>
              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-gray-900 tracking-tight">Direct Messaging</h3>
-                <p className="text-gray-500 max-w-sm mx-auto font-medium">Select a conversation from the sidebar to chat with influencers or hub owners.</p>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight">Select a Chat</h3>
+                <p className="text-gray-500 max-w-sm mx-auto font-medium leading-relaxed">Choose an influencer from the list on the left to start coordinating your campaign.</p>
              </div>
              <button 
                onClick={() => router.push('/dashboard/hubs')}
-               className="px-8 py-3 bg-brand/5 text-brand rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-brand/10 transition-all"
+               className="px-8 py-3 bg-brand/5 text-brand rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-brand/10 transition-all border border-brand/10"
              >
                 Start New Discussion
              </button>
@@ -473,7 +482,7 @@ export default function ChatMessagesPage() {
           onClose={() => setShowPreview(false)}
           mediaItems={[{
             ...selectedChat.context_data,
-            id: selectedChat.id, // Proxy ID
+            id: selectedChat.id,
             created_at: selectedChat.created_at
           }]}
           initialIndex={0}
