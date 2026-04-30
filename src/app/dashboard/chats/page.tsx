@@ -67,7 +67,25 @@ export default function ChatMessagesPage() {
           (payload) => {
             const newMsg = payload.new
             setMessages(prev => {
+              // 1. Check if ID already exists
               if (prev.some(m => m.id === newMsg.id)) return prev
+
+              // 2. Check if this is a confirmation of our own optimistic message
+              // Match by content and sender within a 10-second window
+              const optimisticIndex = prev.findIndex(m => 
+                m.is_optimistic && 
+                m.sender_id === newMsg.sender_id && 
+                m.content === newMsg.content &&
+                Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 10000
+              )
+
+              if (optimisticIndex !== -1) {
+                // Replace optimistic message with real one from DB
+                const updated = [...prev]
+                updated[optimisticIndex] = newMsg
+                return updated
+              }
+
               return [...prev, newMsg]
             })
           }
