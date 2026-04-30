@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import MediaCarouselModal from '@/components/MediaCarouselModal'
 
 export default function ChatMessagesPage() {
   const [chats, setChats] = useState<any[]>([])
@@ -33,6 +34,9 @@ export default function ChatMessagesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isProcessingSale, setIsProcessingSale] = useState(false)
+  
+  // Preview Modal State
+  const [showPreview, setShowPreview] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
@@ -283,7 +287,7 @@ export default function ChatMessagesPage() {
              <button
                key={chat.id}
                onClick={() => setSelectedChatId(chat.id)}
-               className={`w-full flex items-center gap-4 p-4 transition-all border-b border-gray-50/50 ${selectedChatId === chat.id ? 'bg-brand/5 border-l-4 border-l-brand' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}
+               className={`w-full flex items-center gap-4 p-4 transition-all border-b border-gray-50/50 ${selectedChatId === chat.id ? 'brand-gradient-soft border-l-4 border-l-brand' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}
              >
                 <div className="relative">
                    <div className="h-14 w-14 rounded-2xl overflow-hidden border border-gray-100 bg-gray-100">
@@ -353,15 +357,28 @@ export default function ChatMessagesPage() {
                   <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center gap-6 relative overflow-hidden group">
                      <div className="absolute top-0 right-0 w-32 h-full bg-brand/5 -skew-x-12 translate-x-16 group-hover:translate-x-12 transition-transform" />
                      
-                     <div className="h-16 w-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0 border border-gray-100">
+                     <div className="h-16 w-16 bg-gray-100 rounded-2xl overflow-hidden shrink-0 border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowPreview(true)}>
                         {selectedChat.context_data.media_url ? (
-                          <img src={selectedChat.context_data.thumbnail_url || selectedChat.context_data.media_url} className="h-full w-full object-cover" />
+                          selectedChat.context_data.media_type === 'video' ? (
+                            <div className="relative w-full h-full">
+                               <video 
+                                 src={selectedChat.context_data.media_url} 
+                                 poster={selectedChat.context_data.thumbnail_url}
+                                 className="w-full h-full object-cover"
+                               />
+                               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                  <PlayCircle size={24} className="text-white fill-current" />
+                               </div>
+                            </div>
+                          ) : (
+                            <img src={selectedChat.context_data.thumbnail_url || selectedChat.context_data.media_url} className="h-full w-full object-cover" />
+                          )
                         ) : (
                           <div className="h-full w-full flex items-center justify-center text-brand"><ShoppingBag size={24} /></div>
                         )}
                      </div>
 
-                     <div className="flex-1 space-y-1">
+                     <div className="flex-1 space-y-1 cursor-pointer" onClick={() => setShowPreview(true)}>
                         <div className="flex items-center gap-2">
                            <span className="text-[10px] font-black text-brand uppercase tracking-widest">Ongoing Context</span>
                            <div className="h-1 w-1 rounded-full bg-gray-300" />
@@ -448,6 +465,20 @@ export default function ChatMessagesPage() {
           </div>
         )}
       </div>
+
+      {/* Media Preview Modal */}
+      {selectedChat?.context_data?.media_url && (
+        <MediaCarouselModal 
+          isVisible={showPreview}
+          onClose={() => setShowPreview(false)}
+          mediaItems={[{
+            ...selectedChat.context_data,
+            id: selectedChat.id, // Proxy ID
+            created_at: selectedChat.created_at
+          }]}
+          initialIndex={0}
+        />
+      )}
     </div>
   )
 }
