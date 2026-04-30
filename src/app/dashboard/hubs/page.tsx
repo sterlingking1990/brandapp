@@ -22,9 +22,10 @@ import {
   Gamepad2,
   Trophy,
   ArrowRight,
-  Star
+  Star,
+  CheckCircle2
 } from 'lucide-react'
-import Link from 'next/navigation'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 export default function HubsPage() {
@@ -94,7 +95,7 @@ export default function HubsPage() {
     }
   }
 
-  const industries = ['All', ...new Set(hubs.map(h => h.category || h.industry).filter(Boolean))]
+  const industries = ['All', ...Array.from(new Set(hubs.map(h => h.category || h.industry).filter(Boolean)))]
 
   const filteredHubs = hubs.filter(hub => {
     const matchesSearch = hub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

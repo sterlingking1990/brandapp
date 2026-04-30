@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { 
@@ -17,14 +17,14 @@ import {
   Send,
   Upload,
   UploadCloud,
-  MagicWand,
+  Wand2,
   Users,
   Zap
 } from 'lucide-react'
 import HubSelector from '@/components/HubSelector'
 import BrandWallPicker from '@/components/BrandWallPicker'
 
-export default function CreateStatusPage() {
+function CreateStatusContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -60,12 +60,10 @@ export default function CreateStatusPage() {
 
   const handleFormDataChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    
     if (name === 'rewardLimit' && formData.isPrivate && parseInt(value) > totalHubReach && totalHubReach > 0) {
       setFormData({ ...formData, [name]: totalHubReach.toString() })
       return
     }
-
     setFormData({ ...formData, [name]: value })
   }
 
@@ -94,7 +92,7 @@ export default function CreateStatusPage() {
 
       const { data: urlData } = supabase.storage.from('brand-wall').getPublicUrl(fileName)
       
-      // Save to wall media for future use
+      // Also track in brand_wall_media for future reuse
       await supabase.from('brand_wall_media').insert({
         brand_id: brand.id,
         media_url: urlData.publicUrl,
@@ -111,7 +109,7 @@ export default function CreateStatusPage() {
 
   const generateAIDetails = async () => {
     if (!formData.media_url) {
-      setError('Please select or upload an image first to use AI suggestions.')
+      setError('Please select or upload an image first.')
       return
     }
 
@@ -119,8 +117,8 @@ export default function CreateStatusPage() {
     setError(null)
 
     try {
-      const { data, error: aiError } = await supabase.functions.invoke('generate-status-post-details', {
-        body: { imageUrl: formData.media_url },
+      const { data, error: aiError } = await supabase.functions.invoke('generate-campaign-details', {
+        body: { imageUrl: formData.media_url, type: 'status' },
       })
 
       if (aiError) throw aiError
@@ -134,7 +132,7 @@ export default function CreateStatusPage() {
       }
     } catch (err: any) {
       console.error('AI Error:', err)
-      setError('Failed to generate AI suggestions. You can still fill details manually.')
+      setError('Failed to generate AI suggestions.')
     } finally {
       setGeneratingAI(false)
     }
@@ -147,16 +145,9 @@ export default function CreateStatusPage() {
     }
   }
 
-  const togglePrivate = () => {
-    const newIsPrivate = !formData.isPrivate
-    setFormData(prev => ({ ...prev, isPrivate: newIsPrivate }))
-    if (newIsPrivate && parseInt(formData.rewardLimit) > totalHubReach && totalHubReach > 0) {
-      setFormData(prev => ({ ...prev, rewardLimit: totalHubReach.toString() }))
-    }
-  }
-
   const calculateTotalCost = () => {
     const base = (parseFloat(formData.rewardAmount) || 0) * (parseInt(formData.rewardLimit) || 0)
+    // Add hub targeting fee if private
     return formData.isPrivate ? base * 1.1 : base
   }
 
@@ -167,13 +158,11 @@ export default function CreateStatusPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
-      if (!formData.media_url) throw new Error('Please select an image for your status update.')
 
       const expiresAt = new Date()
       expiresAt.setHours(expiresAt.getHours() + parseInt(formData.duration))
 
       // 1. Create the status post
-      // Note: We use is_active = true and correct fields for status_posts
       const { data: statusPost, error: statusError } = await supabase
         .from('status_posts')
         .insert({
@@ -182,7 +171,6 @@ export default function CreateStatusPage() {
           title: formData.title,
           description: formData.description,
           media_url: formData.media_url,
-          media_type: 'image',
           reward_amount: parseFloat(formData.rewardAmount),
           reward_limit: parseInt(formData.rewardLimit),
           expires_at: expiresAt.toISOString(),
@@ -196,14 +184,12 @@ export default function CreateStatusPage() {
 
       // 2. Link Hubs if targeted
       if (formData.isPrivate && selectedHubs.length > 0) {
-        const { error: hubError } = await supabase
-          .from('status_post_hubs')
-          .insert(selectedHubs.map(hubId => ({
+        await supabase.from('status_post_hubs').insert(
+          selectedHubs.map(hubId => ({
             status_post_id: statusPost.id,
             hub_id: hubId
-          })))
-        
-        if (hubError) console.error('Hub linking error:', hubError)
+          }))
+        )
       }
 
       router.push('/dashboard/campaigns?success=status_created')
@@ -229,7 +215,7 @@ export default function CreateStatusPage() {
         onChange={handleFileUpload}
       />
 
-      {/* Sidebar Form Area */}
+      {/* Sidebar Form */}
       <div className="w-full lg:w-[750px] bg-white border-r border-gray-200 overflow-y-auto p-8 flex flex-col">
         <div className="flex-1 space-y-8">
           <div className="flex items-center justify-between">
@@ -238,14 +224,14 @@ export default function CreateStatusPage() {
             </button>
             <div className="flex items-center gap-2">
               {[1, 2, 3, 4].map((s) => (
-                <div key={s} className={`h-1.5 w-12 rounded-full transition-all ${step >= s ? 'bg-green-600' : 'bg-gray-200'}`} />
+                <div key={s} className={`h-1.5 w-12 rounded-full transition-all ${step >= s ? 'bg-brand' : 'bg-gray-200'}`} />
               ))}
             </div>
           </div>
 
           <header>
-            <h1 className="text-2xl font-bold text-gray-900">Post Status Update</h1>
-            <p className="text-gray-500">Share news, stories, and announcements.</p>
+            <h1 className="text-2xl font-bold text-gray-900">Push Status Update</h1>
+            <p className="text-gray-500">Reward influencers for viewing and sharing your story.</p>
           </header>
 
           {error && (
@@ -254,31 +240,31 @@ export default function CreateStatusPage() {
             </div>
           )}
 
-          {/* Step 1: Media */}
+          {/* Step 1: Media Selection */}
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Update Image</label>
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Campaign Visual</label>
                 {uploadingMedia ? (
-                  <div className="w-full aspect-square border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center justify-center bg-green-50 animate-pulse">
-                    <Loader2 className="animate-spin text-green-600" size={32} />
-                    <p className="text-green-600 font-bold mt-2">Uploading...</p>
+                  <div className="w-full aspect-video border-2 border-dashed border-brand/20 rounded-3xl flex flex-col items-center justify-center bg-brand/5 animate-pulse">
+                    <Loader2 className="animate-spin text-brand" size={32} />
+                    <p className="text-brand font-bold mt-2">Uploading...</p>
                   </div>
                 ) : formData.media_url ? (
-                  <div className="relative aspect-square rounded-3xl overflow-hidden group border border-gray-100 shadow-lg">
+                  <div className="relative aspect-video rounded-3xl overflow-hidden group border border-gray-100 shadow-lg">
                     <img src={formData.media_url} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-sm">
                       <button onClick={() => setIsWallPickerOpen(true)} className="bg-white text-gray-900 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:scale-105 transition-transform"><ImageIcon size={16} /> From Wall</button>
-                      <button onClick={() => fileInputRef.current?.click()} className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Upload size={16} /> New Upload</button>
+                      <button onClick={() => fileInputRef.current?.click()} className="bg-brand text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Upload size={16} /> New Upload</button>
                     </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setIsWallPickerOpen(true)} className="aspect-square border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-green-500 hover:text-green-600 transition-all gap-3 bg-gray-50">
+                    <button onClick={() => setIsWallPickerOpen(true)} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
                       <ImageIcon size={32} />
                       <span className="text-xs font-bold">Pick from Wall</span>
                     </button>
-                    <button onClick={() => fileInputRef.current?.click()} className="aspect-square border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-green-500 hover:text-green-600 transition-all gap-3 bg-gray-50">
+                    <button onClick={() => fileInputRef.current?.click()} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
                       <UploadCloud size={32} />
                       <span className="text-xs font-bold">Upload from PC</span>
                     </button>
@@ -288,42 +274,28 @@ export default function CreateStatusPage() {
             </div>
           )}
 
-          {/* Step 2: Content */}
+          {/* Step 2: Messaging */}
           {step === 2 && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex items-center justify-between">
-                   <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Update Details</label>
+                   <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Content & Copy</label>
                    <button 
                      onClick={generateAIDetails}
                      disabled={generatingAI || !formData.media_url}
-                     className="flex items-center gap-2 text-xs font-bold text-purple-600 hover:text-purple-700 disabled:opacity-50"
+                     className="flex items-center gap-2 text-xs font-bold text-brand hover:text-brand/80 disabled:opacity-50"
                    >
-                     {generatingAI ? <Loader2 className="animate-spin" size={14} /> : <Zap size={14} className="fill-current" />}
-                     AI Suggest Details
+                     {generatingAI ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />}
+                     AI Generate
                    </button>
                 </div>
-                
                 <div className="space-y-4">
-                  <input 
-                    name="title"
-                    value={formData.title}
-                    onChange={handleFormDataChange}
-                    placeholder="Update Title (e.g. Fresh Batch Available!)"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                  <textarea 
-                    name="description"
-                    value={formData.description}
-                    onChange={handleFormDataChange}
-                    rows={6}
-                    placeholder="Tell your story... What's new with your brand today?"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
-                  />
+                  <input name="title" value={formData.title} onChange={handleFormDataChange} placeholder="Catchy Headline (e.g. New Summer Collection is Here!)" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
+                  <textarea name="description" value={formData.description} onChange={handleFormDataChange} rows={6} placeholder="What do you want to share with influencers? Keep it short and impactful." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
                 </div>
              </div>
           )}
 
-          {/* Step 3: Incentives & Reach */}
+          {/* Step 3: Rewards & Targeting */}
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -337,7 +309,7 @@ export default function CreateStatusPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
                     <Users size={16} className="text-blue-600" />
-                    Max Views Limit
+                    Maximum Total Views
                   </label>
                   <input name="rewardLimit" type="number" value={formData.rewardLimit} onChange={handleFormDataChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" />
                 </div>
@@ -345,14 +317,14 @@ export default function CreateStatusPage() {
 
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-lg font-bold text-gray-900">Hub Targeting</h3>
+                  <h3 className="text-lg font-bold text-gray-900">Community Targeting</h3>
                   <button 
-                    onClick={togglePrivate}
+                    onClick={() => setFormData({...formData, isPrivate: !formData.isPrivate})}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                      formData.isPrivate ? 'bg-green-600 text-white shadow-lg' : 'bg-gray-100 text-gray-500'
+                      formData.isPrivate ? 'bg-brand text-white shadow-lg' : 'bg-gray-100 text-gray-500'
                     }`}
                   >
-                    {formData.isPrivate ? 'Targeting Active' : 'Target a Community'}
+                    {formData.isPrivate ? 'Hub Targeting Active' : 'Target Hubs'}
                   </button>
                 </div>
                 
@@ -365,34 +337,32 @@ export default function CreateStatusPage() {
                 )}
               </div>
 
-              <div className="p-6 bg-green-600 rounded-3xl text-white shadow-xl shadow-green-600/20">
+              <div className="p-6 bg-brand rounded-3xl text-white shadow-xl shadow-brand/20">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium opacity-80 uppercase tracking-widest text-[10px]">Total Budget</span>
-                  <span className="text-2xl font-black">{calculateTotalCost().toLocaleString()} Coins</span>
+                  <span className="font-medium opacity-80 uppercase tracking-widest text-[10px]">Total Escrow Amount</span>
+                  <span className="text-2xl font-black">{calculateTotalCost().toLocaleString()} BC</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 4: Final Review */}
+          {/* Step 4: Summary */}
           {step === 4 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-               <div className="p-8 bg-green-50 border border-green-100 rounded-[2.5rem] space-y-6 text-center">
-                  <div className="h-16 w-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto">
-                    <CheckCircle2 size={32} />
-                  </div>
+               <div className="p-8 bg-brand/5 border border-brand/10 rounded-[2.5rem] space-y-6 text-center">
+                  <div className="h-16 w-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto"><CheckCircle2 size={32} /></div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Story is Ready!</h3>
-                    <p className="text-gray-500 mt-1">Your brand update will be live instantly.</p>
+                    <h3 className="text-2xl font-bold text-gray-900">Status Ready!</h3>
+                    <p className="text-gray-500 mt-1">Review your status update details and launch.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3 pt-4">
-                    <div className="bg-white p-4 rounded-2xl border border-green-100">
+                    <div className="bg-white p-4 rounded-2xl border border-gray-100">
                       <p className="text-[10px] font-black text-gray-400 uppercase">Budget</p>
-                      <p className="text-lg font-bold text-green-600">{calculateTotalCost()} Coins</p>
+                      <p className="text-lg font-bold text-gray-900">{calculateTotalCost()} BC</p>
                     </div>
-                    <div className="bg-white p-4 rounded-2xl border border-green-100">
-                      <p className="text-[10px] font-black text-gray-400 uppercase">Reach</p>
-                      <p className="text-lg font-bold text-gray-900">{formData.rewardLimit} Views</p>
+                    <div className="bg-white p-4 rounded-2xl border border-gray-100">
+                      <p className="text-[10px] font-black text-gray-400 uppercase">Max Reach</p>
+                      <p className="text-lg font-bold text-gray-900">{formData.rewardLimit}</p>
                     </div>
                   </div>
                </div>
@@ -400,55 +370,51 @@ export default function CreateStatusPage() {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="pt-8 border-t border-gray-100 flex gap-4">
+        {/* Footer Navigation */}
+        <div className="pt-8 border-t border-gray-100 flex gap-4 shrink-0">
           {step > 1 && (
-            <button onClick={() => setStep(step - 1)} className="px-6 py-3 border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50">Back</button>
+            <button onClick={() => setStep(step - 1)} className="px-8 py-4 border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50">Back</button>
           )}
           <button 
             onClick={step < 4 ? () => setStep(step + 1) : handleLaunch}
             disabled={loading || (step === 3 && formData.isPrivate && selectedHubs.length === 0)}
-            className={`flex-1 px-6 py-4 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2
-              ${step === 4 ? 'bg-green-600 hover:bg-green-700' : 'bg-green-600 hover:opacity-90'}
+            className={`flex-1 px-8 py-4 text-white font-black rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2
+              ${step === 4 ? 'bg-brand hover:bg-brand/90' : 'bg-brand hover:opacity-90'}
               disabled:opacity-50
             `}
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (step === 4 ? 'Post Story Now' : 'Next Step')}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (step === 4 ? 'Post Status Now' : 'Next Step')}
           </button>
         </div>
       </div>
 
-      {/* Preview Area */}
+      {/* Preview Column */}
       <div className="hidden lg:flex flex-1 items-center justify-center p-12 bg-gray-100/50 relative overflow-hidden">
         <div className="relative scale-90">
            <div className="w-[320px] h-[640px] bg-black rounded-[3rem] border-8 border-gray-900 shadow-2xl overflow-hidden relative">
-              <div className="h-full bg-gray-50 flex flex-col pt-8">
-                 <div className="px-4 py-3 bg-white border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-900">Brand Wall</span>
-                    <Send size={14} className="text-gray-400" />
+              <div className="h-full bg-white flex flex-col pt-8">
+                 <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Story Preview</span>
+                    <div className="h-2 w-2 rounded-full bg-brand animate-pulse" />
                  </div>
-                 <div className="p-4 overflow-y-auto">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                       <div className="p-3 flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full brand-gradient flex items-center justify-center text-[10px] text-white font-bold">B</div>
-                          <div>
-                            <p className="text-[11px] font-bold text-gray-900">Your Brand</p>
-                            <p className="text-[9px] text-gray-400">Just now</p>
+                 <div className="flex-1 p-0 relative overflow-hidden">
+                    {formData.media_url ? (
+                      <img src={formData.media_url} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-50 flex items-center justify-center text-gray-300">
+                         <ImageIcon size={48} />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-8 space-y-3">
+                       <h4 className="text-xl font-black text-white leading-tight">{formData.title || 'Status Title'}</h4>
+                       <p className="text-xs text-white/70 leading-relaxed line-clamp-3 italic">"{formData.description || 'Your message will appear here for influencers...'}"</p>
+                       <div className="pt-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                             <Coins size={14} className="text-brand" />
+                             <span className="text-xs font-bold text-white">{formData.rewardAmount} BC Reward</span>
                           </div>
-                       </div>
-                       <div className="aspect-square bg-gray-100">
-                          {formData.media_url ? <img src={formData.media_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon size={40} /></div>}
-                       </div>
-                       <div className="p-4 space-y-2">
-                          <h4 className="text-xs font-bold text-gray-900">{formData.title || 'Untitled Update'}</h4>
-                          <p className="text-[10px] text-gray-600 leading-relaxed line-clamp-3">{formData.description || 'Your message will appear here...'}</p>
-                          <div className="pt-2 flex items-center justify-between">
-                             <div className="flex items-center gap-1 text-brand">
-                                <Coins size={10} />
-                                <span className="text-[10px] font-bold">+{formData.rewardAmount}</span>
-                             </div>
-                             <div className="px-3 py-1 rounded-full bg-brand/10 text-brand text-[9px] font-bold uppercase">View Story</div>
-                          </div>
+                          <div className="px-4 py-1.5 bg-brand text-white rounded-lg text-[10px] font-bold uppercase">View Story</div>
                        </div>
                     </div>
                  </div>
@@ -457,5 +423,13 @@ export default function CreateStatusPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CreateStatusPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin text-brand" size={40} /></div>}>
+       <CreateStatusContent />
+    </Suspense>
   )
 }

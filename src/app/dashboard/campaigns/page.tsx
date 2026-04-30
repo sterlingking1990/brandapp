@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -27,7 +27,7 @@ import {
 import Toast from '@/components/Toast'
 import AnalyticsModal from '@/components/AnalyticsModal'
 
-export default function CampaignsPage() {
+function CampaignsContent() {
   const [campaigns, setCampaigns] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showToast, setShowToast] = useState(false)
@@ -347,5 +347,13 @@ function CampaignRow({ campaign, onUpdate, onToast, onViewAnalytics }: { campaig
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CampaignsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand" size={40} /></div>}>
+       <CampaignsContent />
+    </Suspense>
   )
 }

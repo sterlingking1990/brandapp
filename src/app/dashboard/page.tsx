@@ -15,7 +15,10 @@ import {
   Video,
   Send,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Globe,
+  Youtube,
+  Facebook
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -47,12 +50,12 @@ export default async function DashboardPage() {
   const [postsRes, gameRes] = await Promise.all([
     supabase
       .from('status_posts')
-      .select('type, view_count, participation_count, reward_amount, current_rewards_given, is_active, expires_at')
+      .select('title, type, view_count, participation_count, reward_amount, current_rewards_given, reward_limit, is_active, expires_at')
       .eq('brand_id', user.id)
       .eq('is_deleted', false),
     supabase
       .from('game_campaigns')
-      .select('total_interactions, successful_interactions, total_budget, spent_amount, status, expires_at')
+      .select('campaign_name, total_interactions, successful_interactions, total_budget, spent_amount, status, expires_at')
       .eq('brand_id', user.id)
       .eq('is_deleted', false)
   ])
@@ -68,6 +71,21 @@ export default async function DashboardPage() {
   const totalParticipations = 
     postsData.reduce((sum, post) => sum + (post.type === 'status_view' ? (post.view_count || 0) : (post.participation_count || 0)), 0) +
     gameData.reduce((sum, gc) => sum + (gc.successful_interactions || 0), 0)
+
+  // Channel Breakdown for Visualization
+  const hubReach = totalViews // For now hubs are primary organic source
+  const { data: ytAds } = await supabase.from('youtube_ads').select('metrics').eq('brand_id', user.id)
+  const { data: fbAds } = await supabase.from('facebook_ads').select('total_reach').eq('brand_id', user.id)
+  
+  const ytReach = (ytAds || []).reduce((s, a) => s + (parseFloat(a.metrics?.views || 0)), 0)
+  const fbReach = (fbAds || []).reduce((s, a) => s + (parseFloat(a.total_reach || 0)), 0)
+  const grandTotalReach = hubReach + ytReach + fbReach || 1
+
+  // Top Campaigns for Budget Efficiency
+  const topCampaigns = [
+    ...postsData.map(p => ({ name: p.title, spent: (p.reward_amount || 0) * (p.current_rewards_given || 0), budget: (p.reward_amount || 0) * (p.reward_limit || 100), type: 'Status' })),
+    ...gameData.map(g => ({ name: g.campaign_name, spent: g.spent_amount || 0, budget: g.total_budget || 0, type: 'Game' }))
+  ].sort((a, b) => b.budget - a.budget).slice(0, 3)
 
   const activeCampaignsCount = 
     postsData.filter(post => post.is_active && new Date(post.expires_at!) > new Date()).length +
@@ -237,13 +255,64 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="glass-card rounded-[2rem] p-8 bg-white border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-bold">Campaign Performance</h3>
-                <Link href="/dashboard/analytics" className="text-xs font-bold text-brand hover:underline">Full Analytics</Link>
+              <div className="flex items-center justify-between mb-10">
+                <div>
+                   <h3 className="text-xl font-bold text-gray-900">Campaign Performance</h3>
+                   <p className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-widest">Reach & Efficiency</p>
+                </div>
+                <Link href="/dashboard/analytics" className="px-4 py-2 bg-brand/5 text-brand rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand/10 transition-all">Full Analytics</Link>
               </div>
-              <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-[2rem] text-gray-400 bg-gray-50/50">
-                <BarChart3 size={40} className="mb-2 opacity-20" />
-                <p className="text-sm font-bold uppercase tracking-widest opacity-40">Analytics Chart Coming Soon</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                 {/* Growth Distribution */}
+                 <div className="space-y-6">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Growth Distribution</p>
+                    <div className="space-y-5">
+                       <GrowthBar 
+                         label="Hubs (Organic)" 
+                         percentage={Math.round((hubReach / grandTotalReach) * 100)} 
+                         color="bg-brand" 
+                         icon={<Globe size={14} />} 
+                       />
+                       <GrowthBar 
+                         label="YouTube Ads" 
+                         percentage={Math.round((ytReach / grandTotalReach) * 100)} 
+                         color="bg-red-500" 
+                         icon={<Youtube size={14} />} 
+                       />
+                       <GrowthBar 
+                         label="Facebook Ads" 
+                         percentage={Math.round((fbReach / grandTotalReach) * 100)} 
+                         color="bg-blue-600" 
+                         icon={<Facebook size={14} />} 
+                       />
+                    </div>
+                 </div>
+
+                 {/* Budget Efficiency */}
+                 <div className="space-y-6">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Active Budget Utilization</p>
+                    <div className="space-y-6">
+                       {topCampaigns.length > 0 ? topCampaigns.map((camp, i) => (
+                         <div key={i} className="space-y-2">
+                            <div className="flex justify-between items-end">
+                               <p className="text-xs font-bold text-gray-700 truncate max-w-[150px]">{camp.name}</p>
+                               <p className="text-[10px] font-black text-gray-400 uppercase">{Math.round((camp.spent / (camp.budget || 1)) * 100)}% Used</p>
+                            </div>
+                            <div className="h-1.5 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
+                               <div 
+                                 className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                                 style={{ width: `${Math.min(100, (camp.spent / (camp.budget || 1)) * 100)}%` }} 
+                               />
+                            </div>
+                         </div>
+                       )) : (
+                         <div className="py-10 text-center border-2 border-dashed border-gray-50 rounded-2xl">
+                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No active budgets</p>
+                         </div>
+                       )}
+                    </div>
+                 </div>
               </div>
             </div>
           </div>
@@ -318,6 +387,28 @@ function StatCard({ label, value, change, icon }: { label: string, value: string
            <p className="text-xs text-green-600 font-bold">{change}</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function GrowthBar({ label, percentage, color, icon }: { label: string, percentage: number, color: string, icon: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+       <div className="flex justify-between items-center text-[10px] font-bold">
+          <div className="flex items-center gap-2 text-gray-600">
+             <div className={`p-1.5 rounded-lg ${color} text-white`}>
+                {icon}
+             </div>
+             <span className="uppercase tracking-widest">{label}</span>
+          </div>
+          <span className="text-gray-900">{percentage}%</span>
+       </div>
+       <div className="h-2 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
+          <div 
+            className={`h-full ${color} rounded-full transition-all duration-1000`} 
+            style={{ width: `${percentage}%` }} 
+          />
+       </div>
     </div>
   )
 }

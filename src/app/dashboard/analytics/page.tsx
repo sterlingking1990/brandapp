@@ -101,10 +101,12 @@ export default function AnalyticsPage() {
       const hubPerformance: any[] = []
       unboxHubs?.forEach(item => {
         const existing = hubPerformance.find(h => h.id === item.hub_id)
+        const hubName = Array.isArray(item.hubs) ? item.hubs[0]?.name : (item.hubs as any)?.name
+        
         if (existing) {
           existing.sales += (item.total_sales_count || 0)
-        } else if (item.hubs) {
-          hubPerformance.push({ id: item.hub_id, name: item.hubs.name, sales: item.total_sales_count || 0 })
+        } else if (hubName) {
+          hubPerformance.push({ id: item.hub_id, name: hubName, sales: item.total_sales_count || 0 })
         }
       })
 

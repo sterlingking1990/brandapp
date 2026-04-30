@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { 
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import BrandWallPicker from '@/components/BrandWallPicker'
 
-export default function CreatePromotionRequestPage() {
+function CreatePromotionRequestContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -317,5 +317,13 @@ export default function CreatePromotionRequestPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CreatePromotionRequestPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin text-brand" size={40} /></div>}>
+       <CreatePromotionRequestContent />
+    </Suspense>
   )
 }

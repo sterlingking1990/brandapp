@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { 
   Search, 
@@ -27,7 +27,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import MediaCarouselModal from '@/components/MediaCarouselModal'
 
-export default function ChatMessagesPage() {
+function ChatMessagesContent() {
   const [chats, setChats] = useState<any[]>([])
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
   const [messages, setMessages] = useState<any[]>([])
@@ -71,7 +71,6 @@ export default function ChatMessagesPage() {
               if (prev.some(m => m.id === newMsg.id)) return prev
 
               // 2. Check if this is a confirmation of our own optimistic message
-              // Match by content and sender within a 10-second window
               const optimisticIndex = prev.findIndex(m => 
                 m.is_optimistic && 
                 m.sender_id === newMsg.sender_id && 
@@ -80,7 +79,6 @@ export default function ChatMessagesPage() {
               )
 
               if (optimisticIndex !== -1) {
-                // Replace optimistic message with real one from DB
                 const updated = [...prev]
                 updated[optimisticIndex] = newMsg
                 return updated
@@ -507,5 +505,13 @@ export default function ChatMessagesPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function ChatMessagesPage() {
+  return (
+    <Suspense fallback={<div className="h-screen w-full flex flex-col items-center justify-center bg-white"><Loader2 className="animate-spin text-brand" size={40} /></div>}>
+       <ChatMessagesContent />
+    </Suspense>
   )
 }
