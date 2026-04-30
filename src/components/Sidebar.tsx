@@ -13,11 +13,12 @@ import {
   Video,
   Globe,
   Layout,
-  User
+  User,
+  Coins,
+  MessageSquare
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Coins } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -35,10 +36,10 @@ export default function Sidebar() {
     { icon: <Megaphone size={20} />, label: "Campaigns", href: "/dashboard/campaigns" },
     { icon: <Globe size={20} />, label: "Community Hubs", href: "/dashboard/hubs" },
     { icon: <Video size={20} />, label: "Submissions", href: "/dashboard/submissions" },
+    { icon: <MessageSquare size={20} />, label: "Messages", href: "/dashboard/chats" },
     { icon: <ShoppingBag size={20} />, label: "Unbox Review", href: "/dashboard/unbox" },
     { icon: <Layout size={20} />, label: "Brand Wall", href: "/dashboard/wall" },
     { icon: <User size={20} />, label: "Profile", href: "/dashboard/profile" },
-    //{ icon: <Users size={20} />, label: "Influencers", href: "/dashboard/influencers" },
     { icon: <Coins size={20} />, label: "Buy Coins", href: "/dashboard/store" },
     { icon: <BarChart3 size={20} />, label: "Analytics", href: "/dashboard/analytics" },
   ]

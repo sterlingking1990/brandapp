@@ -43,6 +43,70 @@ export default async function DashboardPage() {
     .eq('profile_id', user.id)
     .single()
 
+  // Fetch Stats data matching mobile app logic (uses user.id as brand_id in posts/games)
+  const [postsRes, gameRes] = await Promise.all([
+    supabase
+      .from('status_posts')
+      .select('type, view_count, participation_count, reward_amount, current_rewards_given, is_active, expires_at')
+      .eq('brand_id', user.id)
+      .eq('is_deleted', false),
+    supabase
+      .from('game_campaigns')
+      .select('total_interactions, successful_interactions, total_budget, spent_amount, status, expires_at')
+      .eq('brand_id', user.id)
+      .eq('is_deleted', false)
+  ])
+
+  const postsData = postsRes.data || []
+  const gameData = gameRes.data || []
+
+  // Calculate Stats Exactly like mobile (HomeScreen.js)
+  const totalViews = 
+    postsData.reduce((sum, post) => sum + (post.view_count || 0), 0) +
+    gameData.reduce((sum, gc) => sum + (gc.total_interactions || 0), 0)
+
+  const totalParticipations = 
+    postsData.reduce((sum, post) => sum + (post.type === 'status_view' ? (post.view_count || 0) : (post.participation_count || 0)), 0) +
+    gameData.reduce((sum, gc) => sum + (gc.successful_interactions || 0), 0)
+
+  const activeCampaignsCount = 
+    postsData.filter(post => post.is_active && new Date(post.expires_at!) > new Date()).length +
+    gameData.filter(gc => gc.status === 'active' && new Date(gc.expires_at!) > new Date()).length
+
+  const totalSpentCalculated = 
+    postsData.reduce((sum, post) => sum + ((post.reward_amount || 0) * (post.current_rewards_given || 0)), 0) +
+    gameData.reduce((sum, gc) => sum + (gc.spent_amount || 0), 0)
+
+  // Fetch Recent Submissions (Challenges + Unboxings)
+  const [{ data: challengeSubs }, { data: unboxSubs }] = await Promise.all([
+    supabase
+      .from('challenge_submissions')
+      .select('id, created_at, profiles(full_name, username)')
+      .eq('brand_id', brand?.id)
+      .order('created_at', { ascending: false })
+      .limit(3),
+    supabase
+      .from('unboxed_submissions')
+      .select('id, created_at, profiles(full_name, username)')
+      .eq('brand_id', brand?.id)
+      .order('created_at', { ascending: false })
+      .limit(3)
+  ])
+
+  // Combine and sort recent submissions
+  const allRecentSubmissions = [
+    ...(challengeSubs || []).map(s => ({ ...s, type: 'Challenge Entry' })),
+    ...(unboxSubs || []).map(s => ({ ...s, type: 'Unboxing Video' }))
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+   .slice(0, 4)
+
+  // Formatting helper
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    return num.toString()
+  }
+
   return (
     <>
       {/* Header */}
@@ -50,7 +114,7 @@ export default async function DashboardPage() {
         <h1 className="text-lg font-semibold text-gray-800">Overview</h1>
         
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 bg-brand/10 px-3 py-1.5 rounded-full">
+          <div className="flex items-center gap-2 bg-brand/10 px-3 py-1.5 rounded-full border border-brand/10">
             <Coins className="text-brand" size={18} />
             <span className="text-brand font-bold text-sm">
               {profile?.brandible_coins !== undefined && profile?.brandible_coins !== null 
@@ -83,7 +147,7 @@ export default async function DashboardPage() {
             {brand?.verification_status === 'verified' ? (
               <>
                 <CheckCircle2 size={18} />
-                <span className="text-sm font-bold">Verified Brand</span>
+                <span className="text-sm font-bold">{brand?.is_agency ? 'Verified Agency' : 'Verified Brand'}</span>
               </>
             ) : (
               <>
@@ -144,60 +208,77 @@ export default async function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard 
+            label="Total Reach" 
+            value={formatNumber(totalViews)} 
+            change="Total views"
+            icon={<BarChart3 className="text-blue-500" />}
+          />
+          <StatCard 
+            label="Engagements" 
+            value={formatNumber(totalParticipations)} 
+            change="User actions"
+            icon={<Users className="text-orange-500" />}
+          />
+          <StatCard 
             label="Active Campaigns" 
-            value={brand?.active_campaigns || '0'} 
-            change="+2 this week"
+            value={activeCampaignsCount} 
+            change="Live now"
             icon={<Megaphone className="text-brand" />}
           />
           <StatCard 
-            label="Total Reach" 
-            value="1.2M" 
-            change="+15% vs last month"
-            icon={<Users className="text-blue-500" />}
-          />
-          <StatCard 
-            label="Engagement Rate" 
-            value="4.8%" 
-            change="+0.5% vs last month"
-            icon={<BarChart3 className="text-orange-500" />}
-          />
-          <StatCard 
             label="Total Spent" 
-            value={`BC ${Number(brand?.total_spent || 0).toLocaleString()}`} 
-            change="Within budget"
+            value={`BC ${totalSpentCalculated.toLocaleString()}`} 
+            change="Accumulated"
             icon={<ShoppingBag className="text-purple-500" />}
           />
         </div>
 
-        {/* Recent Activity Placeholder */}
+        {/* Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <div className="glass-card rounded-[2rem] p-8 bg-white border border-gray-100 shadow-sm">
-              <h3 className="text-xl font-bold mb-6">Performance Overview</h3>
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-bold">Campaign Performance</h3>
+                <Link href="/dashboard/analytics" className="text-xs font-bold text-brand hover:underline">Full Analytics</Link>
+              </div>
               <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-[2rem] text-gray-400 bg-gray-50/50">
                 <BarChart3 size={40} className="mb-2 opacity-20" />
-                <p className="text-sm font-bold uppercase tracking-widest opacity-40">Analytics Chart Placeholder</p>
+                <p className="text-sm font-bold uppercase tracking-widest opacity-40">Analytics Chart Coming Soon</p>
               </div>
             </div>
           </div>
           
           <div className="space-y-6">
-            <div className="glass-card rounded-[2rem] p-8 bg-white border border-gray-100 shadow-sm">
+            <div className="glass-card rounded-[2rem] p-8 bg-white border border-gray-100 shadow-sm flex flex-col h-full">
               <h3 className="text-xl font-bold mb-6">Recent Submissions</h3>
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-all cursor-pointer group border border-transparent hover:border-gray-100">
-                    <div className="h-12 w-12 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-brand/10 group-hover:text-brand transition-colors">
-                       <Video size={20} />
+              <div className="space-y-4 flex-1">
+                {allRecentSubmissions.length > 0 ? allRecentSubmissions.map((sub: any) => (
+                  <div key={sub.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-all cursor-pointer group border border-transparent hover:border-gray-100">
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${sub.type === 'Unboxing Video' ? 'bg-orange-50 text-orange-600' : 'bg-brand/10 text-brand'}`}>
+                       {sub.type === 'Unboxing Video' ? <ShoppingBag size={20} /> : <Video size={20} />}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900">New Challenge Entry</p>
-                      <p className="text-xs text-gray-500 font-medium">2 minutes ago</p>
+                      <p className="text-sm font-bold text-gray-900 line-clamp-1">{sub.profiles?.full_name}</p>
+                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider">{sub.type}</p>
                     </div>
                     <ChevronRight size={16} className="text-gray-300 group-hover:text-brand" />
                   </div>
-                ))}
+                )) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 opacity-40">
+                     <Clock size={32} className="mb-2" />
+                     <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">No submissions<br/>recorded yet</p>
+                  </div>
+                )}
               </div>
+              
+              {allRecentSubmissions.length > 0 && (
+                <Link 
+                  href="/dashboard/submissions"
+                  className="mt-6 w-full py-3 bg-gray-50 rounded-xl text-center text-xs font-black text-gray-400 hover:text-brand hover:bg-brand/5 transition-all uppercase tracking-widest"
+                >
+                  View All Submissions
+                </Link>
+              )}
             </div>
           </div>
         </div>
