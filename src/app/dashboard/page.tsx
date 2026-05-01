@@ -215,8 +215,8 @@ export default async function DashboardPage() {
             />
             <QuickActionCard 
               icon={<Zap size={24} />}
-              title="Unbox"
-              subtitle="Review & Pay"
+              title="Affiliate"
+              subtitle="Performance deals"
               color="bg-brand"
               href="/dashboard/unbox"
             />

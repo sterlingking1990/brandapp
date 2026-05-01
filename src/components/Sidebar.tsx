@@ -37,7 +37,7 @@ export default function Sidebar() {
     { icon: <Globe size={20} />, label: "Community Hubs", href: "/dashboard/hubs" },
     { icon: <Video size={20} />, label: "Submissions", href: "/dashboard/submissions" },
     { icon: <MessageSquare size={20} />, label: "Messages", href: "/dashboard/chats" },
-    { icon: <ShoppingBag size={20} />, label: "Unbox Review", href: "/dashboard/unbox" },
+    { icon: <ShoppingBag size={20} />, label: "Affiliate Partnerships", href: "/dashboard/unbox" },
     { icon: <Layout size={20} />, label: "Brand Wall", href: "/dashboard/wall" },
     { icon: <User size={20} />, label: "Profile", href: "/dashboard/profile" },
     { icon: <Coins size={20} />, label: "Buy Coins", href: "/dashboard/store" },
@@ -48,8 +48,8 @@ export default function Sidebar() {
     <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col fixed h-full">
       <div className="p-6">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 brand-gradient rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">B</span>
+          <div className="h-10 w-10 overflow-hidden rounded-xl">
+             <img src="/logo.png" alt="brandible" className="h-full w-full object-contain" />
           </div>
           <span className="text-xl font-bold text-gray-900 tracking-tight">brandible</span>
         </div>

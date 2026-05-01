@@ -100,7 +100,7 @@ export default function UnboxReviewPage() {
 
       if (error) throw error
       if (data?.success) {
-        setToastMessage('Unboxing approved and listed on Hub!')
+        setToastMessage('Affiliate Partnership approved and listed on Hub!')
         setShowToast(true)
         setShowApproveModal(false)
         setSelectedSubmission(null)
@@ -169,7 +169,7 @@ export default function UnboxReviewPage() {
   }
 
   const handleReject = async (submission: any) => {
-    if (!confirm('Are you sure you want to reject this unboxing?')) return
+    if (!confirm('Are you sure you want to reject this affiliate partnership?')) return
     
     setIsProcessing(true)
     try {
@@ -200,7 +200,7 @@ export default function UnboxReviewPage() {
       <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <ShoppingBag className="text-brand" size={20} />
-          <h1 className="text-lg font-semibold text-gray-800">Review & Pay (Unboxings)</h1>
+          <h1 className="text-lg font-semibold text-gray-800">Affiliate Partnerships</h1>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-xl">
           {['pending', 'approved'].map((s) => (
@@ -211,7 +211,7 @@ export default function UnboxReviewPage() {
                 filter === s ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {s === 'pending' ? 'To Review' : 'Active Deals'}
+              {s === 'pending' ? 'Partnership Requests' : 'Active Partners'}
             </button>
           ))}
         </div>
@@ -219,8 +219,8 @@ export default function UnboxReviewPage() {
 
       <main className="p-8 max-w-7xl mx-auto w-full flex-1">
         <div className="mb-8">
-           <h2 className="text-2xl font-black text-gray-900">Unboxing Submissions</h2>
-           <p className="text-sm text-gray-500 font-medium">Review pitches from hub owners and set up referral partnerships.</p>
+           <h2 className="text-2xl font-black text-gray-900">Affiliate Submissions</h2>
+           <p className="text-sm text-gray-500 font-medium">Review pitches from hub owners and set up performance-based commissions.</p>
         </div>
 
         {loading ? (
@@ -244,7 +244,7 @@ export default function UnboxReviewPage() {
             <div className="h-24 w-24 bg-white rounded-3xl shadow-sm border border-gray-100 flex items-center justify-center text-gray-300">
                <VideoIcon size={40} />
             </div>
-            <h3 className="text-xl font-bold text-gray-900">No {filter} unboxings</h3>
+            <h3 className="text-xl font-bold text-gray-900">No {filter} Affiliates</h3>
             <p className="text-gray-500 max-w-xs mx-auto">When hub owners respond to your promotion requests, they will appear here.</p>
           </div>
         )}
