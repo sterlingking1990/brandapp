@@ -1,5 +1,22 @@
 import { createClient } from './supabase/client'
 
+export const uploadStatusMedia = async (file: File, userId: string) => {
+  const supabase = createClient()
+  const fileName = `${userId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
+  
+  const { data, error } = await supabase.storage
+    .from('status-media')
+    .upload(fileName, file)
+
+  if (error) throw error
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('status-media')
+    .getPublicUrl(fileName)
+
+  return publicUrl
+}
+
 export const uploadBrandWallMedia = async (file: File, brandId: string) => {
   const supabase = createClient()
   const fileName = `${brandId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`

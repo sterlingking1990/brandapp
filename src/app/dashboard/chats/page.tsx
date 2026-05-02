@@ -236,6 +236,7 @@ function ChatMessagesContent() {
       if (error) throw error
       if (data.success) {
         alert('Sale recorded and influencer rewarded!')
+        fetchInitialData()
       } else {
         alert(data.message || 'Failed to record sale')
       }
@@ -244,6 +245,10 @@ function ChatMessagesContent() {
     } finally {
       setIsProcessingSale(false)
     }
+  }
+
+  const handleNotYetSale = () => {
+    alert('You can tap "I SOLD" once the sale is complete. This chat will remain available for follow-up.')
   }
 
   const selectedChat = chats.find(c => c.id === selectedChatId)
@@ -409,6 +414,36 @@ function ChatMessagesContent() {
                      )}
                   </div>
                </div>
+            )}
+
+            {selectedChat?.context_data?.unboxed_submission_id && (
+              <div className="px-8 pb-2">
+                <div className="bg-white rounded-3xl border border-gray-100 p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Did this chat lead to a sale?</p>
+                      <p className="text-xs text-gray-500 mt-1">Use this once the influencer sale has been confirmed.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRecordSale}
+                        disabled={isProcessingSale}
+                        className="inline-flex items-center justify-center rounded-2xl bg-brand px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:opacity-90 disabled:opacity-40"
+                      >
+                        {isProcessingSale ? <Loader2 className="animate-spin" size={14} /> : 'I SOLD'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNotYetSale}
+                        className="inline-flex items-center justify-center rounded-2xl border border-gray-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-600 transition-all hover:bg-gray-50"
+                      >
+                        NOT YET
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Scrollable Messages Area */}

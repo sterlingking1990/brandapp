@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import HubSelector from '@/components/HubSelector'
 import BrandWallPicker from '@/components/BrandWallPicker'
+import { uploadStatusMedia } from '@/utils/media'
 
 function CreateStatusContent() {
   const router = useRouter()
@@ -43,10 +44,10 @@ function CreateStatusContent() {
     rewardAmount: '5',
     rewardLimit: '50', // Max views
     duration: '24',
-    isPrivate: false,
-    media_url: ''
+    isPrivate: false
   })
 
+  const [mediaItems, setMediaItems] = useState<Array<{id: string; uri: string; type: string}>>([]) // Multi-media support
   const [selectedHubs, setSelectedHubs] = useState<string[]>([])
   const [totalHubReach, setTotalHubReach] = useState(0)
 
@@ -68,47 +69,29 @@ function CreateStatusContent() {
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
     setUploadingMedia(true)
     setError(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
-
-      const { data: brand } = await supabase.from('brands').select('id').eq('profile_id', user.id).single()
-      if (!brand) throw new Error('Brand profile not found')
-
-      const timestamp = Date.now()
-      const fileName = `${brand.id}/${timestamp}_${file.name}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('brand-wall')
-        .upload(fileName, file)
-
-      if (uploadError) throw uploadError
-
-      const { data: urlData } = supabase.storage.from('brand-wall').getPublicUrl(fileName)
+      const newMedia = Array.from(files).map((file, index) => ({
+        id: `${Date.now()}-${index}`,
+        uri: URL.createObjectURL(file),
+        type: file.type.startsWith('video') ? 'video' : 'image'
+      }))
       
-      // Also track in brand_wall_media for future reuse
-      await supabase.from('brand_wall_media').insert({
-        brand_id: brand.id,
-        media_url: urlData.publicUrl,
-        media_type: file.type.startsWith('video') ? 'video' : 'image'
-      })
-
-      setFormData({ ...formData, media_url: urlData.publicUrl })
+      setMediaItems(prev => [...prev, ...newMedia])
     } catch (err: any) {
-      setError(`Upload failed: ${err.message}`)
+      setError(`Upload failed: ${err?.message || 'Unknown error'}`)
     } finally {
       setUploadingMedia(false)
     }
   }
 
   const generateAIDetails = async () => {
-    if (!formData.media_url) {
+    if (mediaItems.length === 0) {
       setError('Please select or upload an image first.')
       return
     }
@@ -117,8 +100,29 @@ function CreateStatusContent() {
     setError(null)
 
     try {
-      const { data, error: aiError } = await supabase.functions.invoke('generate-campaign-details', {
-        body: { imageUrl: formData.media_url, type: 'status' },
+      const firstMedia = mediaItems[0]
+      let payload = {}
+      
+      if (firstMedia.uri.startsWith('https')) {
+        // Brand Wall media - send URL directly
+        payload = { imageUrl: firstMedia.uri }
+      } else if (firstMedia.uri.startsWith('blob:')) {
+        // Newly uploaded file - convert blob to base64
+        const response = await fetch(firstMedia.uri)
+        const blob = await response.blob()
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(blob)
+        })
+        payload = { imageBase64: base64.split(',')[1] } // Remove data:image/...;base64, prefix
+      } else {
+        // Fallback - assume it's a URL
+        payload = { imageUrl: firstMedia.uri }
+      }
+
+      const { data, error: aiError } = await supabase.functions.invoke('generate-status-post-details', {
+        body: payload,
       })
 
       if (aiError) throw aiError
@@ -138,6 +142,27 @@ function CreateStatusContent() {
     }
   }
 
+  const removeMedia = (mediaId: string) => {
+    setMediaItems(mediaItems.filter(m => m.id !== mediaId))
+  }
+
+  const reorderMedia = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= mediaItems.length) return
+    const newMedia = [...mediaItems]
+    const [moved] = newMedia.splice(fromIndex, 1)
+    newMedia.splice(toIndex, 0, moved)
+    setMediaItems(newMedia)
+  }
+
+  const addMediaFromWall = (wallMediaUrl: string) => {
+    setMediaItems([...mediaItems, {
+      id: Math.random().toString(36).substr(2, 9),
+      uri: wallMediaUrl,
+      type: 'image'
+    }])
+    setIsWallPickerOpen(false)
+  }
+
   const handleReachCalculated = (reach: number) => {
     setTotalHubReach(reach)
     if (formData.isPrivate && parseInt(formData.rewardLimit) > reach && reach > 0) {
@@ -151,7 +176,30 @@ function CreateStatusContent() {
     return formData.isPrivate ? base * 1.1 : base
   }
 
+  const refreshSupabaseSchema = async () => {
+    // Recreate Supabase client just before RPC calls to avoid stale schema cache.
+    return createClient()
+  }
+
   const handleLaunch = async () => {
+    // Validation
+    if (!formData.title.trim()) {
+      setError('Please enter a title')
+      return
+    }
+    if (mediaItems.length === 0) {
+      setError('Please add at least one media item')
+      return
+    }
+    if (parseFloat(formData.rewardAmount) < 5) {
+      setError('Reward must be at least 5 coins')
+      return
+    }
+    if (formData.isPrivate && selectedHubs.length === 0) {
+      setError('Please select at least one community')
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -162,39 +210,64 @@ function CreateStatusContent() {
       const expiresAt = new Date()
       expiresAt.setHours(expiresAt.getHours() + parseInt(formData.duration))
 
-      // 1. Create the status post
-      const { data: statusPost, error: statusError } = await supabase
-        .from('status_posts')
-        .insert({
-          brand_id: user.id,
-          type: 'status_view',
-          title: formData.title,
-          description: formData.description,
-          media_url: formData.media_url,
-          reward_amount: parseFloat(formData.rewardAmount),
-          reward_limit: parseInt(formData.rewardLimit),
-          expires_at: expiresAt.toISOString(),
-          is_private: formData.isPrivate,
-          is_active: true
+      // Prepare media items for RPC (like mobile app)
+      const mediaItemsData = await Promise.all(
+        mediaItems.map(async (media, index) => {
+          let mediaUrl = media.uri
+          if (media.uri.startsWith('blob:')) {
+            const blob = await fetch(media.uri).then(r => r.blob())
+            const file = new File([blob], `media-${index}`)
+            mediaUrl = await uploadStatusMedia(file, user.id)
+          }
+          return {
+            media_url: mediaUrl,
+            media_type: media.type || 'image'
+          }
         })
-        .select()
-        .single()
+      )
 
-      if (statusError) throw statusError
+      // Use mobile app's RPC: create_status_post_with_media_array
+      const freshSupabase = await refreshSupabaseSchema()
+      const { data: result, error: rpcError } = await freshSupabase.rpc('create_status_post_with_media_array', {
+        p_brand_id: user.id,
+        p_type: 'status_view',
+        p_title: formData.title,
+        p_description: formData.description,
+        p_media_items: mediaItemsData,
+        p_duration: parseInt(formData.duration),
+        p_reward_amount: parseFloat(formData.rewardAmount),
+        p_reward_limit: parseInt(formData.rewardLimit),
+        p_expires_at: expiresAt.toISOString(),
+        p_hashtags: [],
+        p_is_private: formData.isPrivate,
+        p_target_locations: []
+      })
 
-      // 2. Link Hubs if targeted
+      if (rpcError) {
+        console.error('Status creation RPC error:', rpcError)
+        throw rpcError
+      }
+      if (!result?.success) throw new Error(result?.error || 'Failed to create status')
+
+      // Link hubs if targeted (using mobile app's RPC)
       if (formData.isPrivate && selectedHubs.length > 0) {
-        await supabase.from('status_post_hubs').insert(
-          selectedHubs.map(hubId => ({
-            status_post_id: statusPost.id,
-            hub_id: hubId
-          }))
-        )
+        const freshSupabaseForHubs = await refreshSupabaseSchema()
+        const { data: hubResult, error: hubError } = await freshSupabaseForHubs.rpc('save_campaign_hubs', {
+          p_status_post_id: result.status_post_id,
+          p_hub_ids: selectedHubs
+        })
+        if (hubError) {
+          console.error('Hub linking error:', hubError)
+          throw new Error('Failed to link hubs: ' + hubError.message)
+        }
+        if (hubResult?.success === false) {
+          throw new Error(hubResult.error || 'Failed to link hubs')
+        }
       }
 
       router.push('/dashboard/campaigns?success=status_created')
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'Failed to create status')
       setLoading(false)
     }
   }
@@ -204,14 +277,15 @@ function CreateStatusContent() {
       <BrandWallPicker 
         isOpen={isWallPickerOpen}
         onClose={() => setIsWallPickerOpen(false)}
-        onSelect={(url) => setFormData({ ...formData, media_url: url })}
+        onSelect={(url) => addMediaFromWall(url)}
       />
 
       <input 
         type="file" 
         ref={fileInputRef} 
         className="hidden" 
-        accept="image/*"
+        accept="image/*,video/*"
+        multiple
         onChange={handleFileUpload}
       />
 
@@ -244,32 +318,39 @@ function CreateStatusContent() {
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Campaign Visual</label>
-                {uploadingMedia ? (
-                  <div className="w-full aspect-video border-2 border-dashed border-brand/20 rounded-3xl flex flex-col items-center justify-center bg-brand/5 animate-pulse">
-                    <Loader2 className="animate-spin text-brand" size={32} />
-                    <p className="text-brand font-bold mt-2">Uploading...</p>
-                  </div>
-                ) : formData.media_url ? (
-                  <div className="relative aspect-video rounded-3xl overflow-hidden group border border-gray-100 shadow-lg">
-                    <img src={formData.media_url} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-sm">
-                      <button onClick={() => setIsWallPickerOpen(true)} className="bg-white text-gray-900 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:scale-105 transition-transform"><ImageIcon size={16} /> From Wall</button>
-                      <button onClick={() => fileInputRef.current?.click()} className="bg-brand text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Upload size={16} /> New Upload</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setIsWallPickerOpen(true)} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
-                      <ImageIcon size={32} />
-                      <span className="text-xs font-bold">Pick from Wall</span>
-                    </button>
-                    <button onClick={() => fileInputRef.current?.click()} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
-                      <UploadCloud size={32} />
-                      <span className="text-xs font-bold">Upload from PC</span>
-                    </button>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Campaign Visuals</label>
+                  <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{mediaItems.length} item{mediaItems.length !== 1 ? 's' : ''} added</span>
+                </div>
+
+                {/* Media Grid */}
+                {mediaItems.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {mediaItems.map((media, index) => (
+                      <div key={media.id} className="relative aspect-video rounded-xl overflow-hidden border-2 border-gray-200 group">
+                        <img src={media.uri} alt={`Media ${index + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-sm">
+                          <button onClick={() => reorderMedia(index, index - 1)} className="bg-white text-gray-900 p-1.5 rounded text-xs hover:scale-110">↑</button>
+                          <button onClick={() => reorderMedia(index, index + 1)} className="bg-white text-gray-900 p-1.5 rounded text-xs hover:scale-110">↓</button>
+                          <button onClick={() => removeMedia(media.id)} className="bg-red-500 text-white p-1.5 rounded text-xs hover:scale-110">✕</button>
+                        </div>
+                        <span className="absolute top-1.5 left-1.5 bg-brand text-white text-xs font-bold px-2 py-1 rounded">{index + 1}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
+
+                {/* Add More Button */}
+                <div className="grid grid-cols-2 gap-4">
+                  <button onClick={() => setIsWallPickerOpen(true)} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
+                    <ImageIcon size={32} />
+                    <span className="text-xs font-bold">From Wall</span>
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} className="h-32 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 hover:border-brand hover:text-brand transition-all gap-3 bg-gray-50">
+                    <UploadCloud size={32} />
+                    <span className="text-xs font-bold">Add More</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -281,7 +362,7 @@ function CreateStatusContent() {
                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Content & Copy</label>
                    <button 
                      onClick={generateAIDetails}
-                     disabled={generatingAI || !formData.media_url}
+                     disabled={generatingAI || mediaItems.length === 0}
                      className="flex items-center gap-2 text-xs font-bold text-brand hover:text-brand/80 disabled:opacity-50"
                    >
                      {generatingAI ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />}
@@ -289,7 +370,7 @@ function CreateStatusContent() {
                    </button>
                 </div>
                 <div className="space-y-4">
-                  <input name="title" value={formData.title} onChange={handleFormDataChange} placeholder="Catchy Headline (e.g. New Summer Collection is Here!)" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
+                  <input name="title" value={formData.title} onChange={handleFormDataChange} placeholder="Catchy Headline (e.g. New Summer Collection is Here!)" className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-brand outline-none transition-all" />
                   <textarea name="description" value={formData.description} onChange={handleFormDataChange} rows={6} placeholder="What do you want to share with influencers? Keep it short and impactful." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
                 </div>
              </div>
@@ -398,8 +479,8 @@ function CreateStatusContent() {
                     <div className="h-2 w-2 rounded-full bg-brand animate-pulse" />
                  </div>
                  <div className="flex-1 p-0 relative overflow-hidden">
-                    {formData.media_url ? (
-                      <img src={formData.media_url} className="w-full h-full object-cover" />
+                    {mediaItems.length > 0 ? (
+                      <img src={mediaItems[0].uri} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gray-50 flex items-center justify-center text-gray-300">
                          <ImageIcon size={48} />
