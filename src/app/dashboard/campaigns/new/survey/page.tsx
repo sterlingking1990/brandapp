@@ -18,9 +18,13 @@ import {
   Trash2,
   GitBranch,
   Star,
-  Users
+  Users,
+  MapPin,
+  Hash,
+  Settings
 } from 'lucide-react'
 import HubSelector from '@/components/HubSelector'
+import InterestsInput from '@/components/InterestsInput'
 
 function CreateSurveyContent() {
   const router = useRouter()
@@ -37,6 +41,8 @@ function CreateSurveyContent() {
     rewardLimit: '100',
     duration: '48',
     isPrivate: false,
+    hashtags: '',
+    targetLocations: [] as string[],
   })
 
   const [selectedHubs, setSelectedHubs] = useState<string[]>([])
@@ -55,41 +61,114 @@ function CreateSurveyContent() {
       question: '', 
       question_type: 'text', 
       options: [], 
-      is_required: true 
+      is_required: true,
+      skip_logic: {}
     }
   ])
+
+  const [expandedSkipLogic, setExpandedSkipLogic] = useState<{[key: number]: boolean}>({})
 
   const addQuestion = () => {
     setQuestions([...questions, { 
       question: '', 
       question_type: 'text', 
       options: [], 
-      is_required: true 
+      is_required: true,
+      skip_logic: {}
     }])
   }
 
   const removeQuestion = (index: number) => {
     if (questions.length > 1) {
-      setQuestions(questions.filter((_, i) => i !== index))
+      const updated = questions.filter((_, i) => i !== index)
+      
+      // Update skip logic references to account for removed question
+      const newUpdated = updated.map((q, newIndex) => {
+        if (q.question_type === 'multiple_choice' && q.options) {
+          return {
+            ...q,
+            options: q.options.map((opt: any) => {
+              // Keep 'no-skip' and 'end' as is
+              if (opt.next_question_id === 'no-skip' || opt.next_question_id === 'end') {
+                return opt
+              }
+              
+              // Handle question index references
+              let adjustedId = opt.next_question_id
+              if (typeof adjustedId === 'number') {
+                if (adjustedId === index) {
+                  // If pointing to removed question, reset to no-skip
+                  return { ...opt, next_question_id: 'no-skip' }
+                } else if (adjustedId > index) {
+                  // Adjust indices for questions after the removed one
+                  return { ...opt, next_question_id: adjustedId - 1 }
+                }
+              }
+              return opt
+            })
+          }
+        }
+        return q
+      })
+      
+      setQuestions(newUpdated)
     }
   }
 
   const updateQuestion = (index: number, field: string, value: any) => {
     const newQuestions = [...questions]
     newQuestions[index] = { ...newQuestions[index], [field]: value }
+    
+    // Convert options to proper format when changing question type
+    if (field === 'question_type') {
+      if (value === 'multiple_choice') {
+        // Convert any string options to objects
+        newQuestions[index].options = (newQuestions[index].options || []).map((opt: any) => 
+          typeof opt === 'string' 
+            ? { option_text: opt, next_question_id: 'no-skip' }
+            : opt
+        )
+      } else {
+        // For non-multiple choice, clear options
+        newQuestions[index].options = []
+      }
+    }
+    
     setQuestions(newQuestions)
   }
 
   const addOption = (qIndex: number) => {
     const newQuestions = [...questions]
-    newQuestions[qIndex].options = [...newQuestions[qIndex].options, '']
+    newQuestions[qIndex].options = [...newQuestions[qIndex].options, { option_text: '', next_question_id: 'no-skip' }]
     setQuestions(newQuestions)
   }
 
-  const updateOption = (qIndex: number, oIndex: number, value: string) => {
+  const removeOption = (qIndex: number, oIndex: number) => {
     const newQuestions = [...questions]
-    newQuestions[qIndex].options[oIndex] = value
+    newQuestions[qIndex].options = newQuestions[qIndex].options.filter((_: any, i: number) => i !== oIndex)
     setQuestions(newQuestions)
+  }
+
+  const updateOptionSkipLogic = (qIndex: number, oIndex: number, nextValue: any) => {
+    const newQuestions = [...questions]
+    
+    let nextId = 'no-skip'
+    
+    if (nextValue === 'no-skip' || nextValue === 'end') {
+      nextId = nextValue
+    } else if (nextValue !== null && nextValue !== undefined) {
+      nextId = nextValue
+    }
+    
+    newQuestions[qIndex].options[oIndex].next_question_id = nextId
+    setQuestions(newQuestions)
+  }
+
+  const toggleSkipLogic = (questionIndex: number) => {
+    setExpandedSkipLogic(prev => ({
+      ...prev,
+      [questionIndex]: !prev[questionIndex]
+    }))
   }
 
   const handleReachCalculated = (reach: number) => {
@@ -115,58 +194,46 @@ function CreateSurveyContent() {
       const expiresAt = new Date()
       expiresAt.setHours(expiresAt.getHours() + parseInt(formData.duration))
 
-      // 1. Create Status Post
-      const { data: statusPost, error: statusError } = await supabase
-        .from('status_posts')
-        .insert({
-          brand_id: user.id,
-          type: 'survey',
-          title: formData.title,
-          description: formData.description,
-          reward_amount: parseFloat(formData.rewardAmount),
-          reward_limit: parseInt(formData.rewardLimit),
-          expires_at: expiresAt.toISOString(),
-          is_private: formData.isPrivate,
-          is_active: true
-        })
-        .select()
-        .single()
-
-      if (statusError) throw statusError
-
-      // 2. Create Survey
-      const { data: survey, error: surveyError } = await supabase
-        .from('surveys')
-        .insert({
-          status_post_id: statusPost.id,
-          brand_id: user.id,
-          title: formData.title,
-          description: formData.description
-        })
-        .select()
-        .single()
-
-      if (surveyError) throw surveyError
-
-      // 3. Create Questions
-      const { error: questionsError } = await supabase
-        .from('survey_questions')
-        .insert(questions.map((q, i) => ({
-          survey_id: survey.id,
+      const questionsWithSkipLogic = questions.map((q, index) => {
+        const questionData: any = {
           question_text: q.question,
           question_type: q.question_type,
-          options: q.options,
           is_required: q.is_required,
-          order_index: i
-        })))
+          order_index: index
+        }
+        
+        // Only add options for multiple_choice questions
+        if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
+          questionData.options = q.options.map((opt: any) => ({
+            option_text: opt.option_text || opt,
+            next_question_id: opt.next_question_id || 'no-skip'
+          }))
+        }
+        
+        return questionData
+      })
 
-      if (questionsError) throw questionsError
+      const hashtagsArray = formData.hashtags.split(',').map((h: string) => h.trim()).filter((h: string) => h)
 
-      // 4. Link Hubs
-      if (formData.isPrivate && selectedHubs.length > 0) {
-        await supabase.from('status_post_hubs').insert(
-          selectedHubs.map(hubId => ({ status_post_id: statusPost.id, hub_id: hubId }))
-        )
+      const { data: surveyData, error: surveyError } = await supabase
+        .rpc('create_survey_with_status_post', {
+          p_brand_id: user.id,
+          p_title: formData.title,
+          p_description: formData.description,
+          p_duration: parseInt(formData.duration),
+          p_reward_amount: parseFloat(formData.rewardAmount),
+          p_reward_limit: parseInt(formData.rewardLimit),
+          p_expires_at: expiresAt.toISOString(),
+          p_questions: questionsWithSkipLogic,
+          p_hashtags: hashtagsArray,
+          p_is_private: formData.isPrivate,
+          p_target_locations: formData.targetLocations,
+          p_target_hub_ids: selectedHubs
+        })
+
+      if (surveyError) {
+        console.error('RPC Error:', surveyError)
+        throw surveyError
       }
 
       router.push('/dashboard/campaigns?success=survey_created')
@@ -227,6 +294,16 @@ function CreateSurveyContent() {
                     />
                   </div>
                </div>
+
+               <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                      <Hash size={16} className="text-purple-600" />
+                      Interests & Hashtags
+                    </label>
+                    <InterestsInput onInterestsChange={(hashtags) => setFormData({...formData, hashtags})} />
+                  </div>
+               </div>
             </div>
           )}
 
@@ -251,12 +328,12 @@ function CreateSurveyContent() {
                       className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                     />
 
-                    <div className="flex gap-2">
-                       {['text', 'multiple_choice'].map((type) => (
+                    <div className="flex gap-2 flex-wrap">
+                       {['text', 'multiple_choice', 'rating', 'yes_no'].map((type) => (
                          <button
                            key={type}
                            onClick={() => updateQuestion(qIndex, 'question_type', type)}
-                           className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${q.question_type === type ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white text-gray-400 border border-gray-200 hover:border-blue-200'}`}
+                           className={`px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all ${q.question_type === type ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white text-gray-400 border border-gray-200 hover:border-blue-200'}`}
                          >
                            {type.replace('_', ' ')}
                          </button>
@@ -265,18 +342,104 @@ function CreateSurveyContent() {
 
                     {q.question_type === 'multiple_choice' && (
                       <div className="space-y-3 pt-2">
-                        {q.options.map((opt: string, oIndex: number) => (
-                          <input 
-                            key={oIndex}
-                            value={opt}
-                            onChange={e => updateOption(qIndex, oIndex, e.target.value)}
-                            placeholder={`Option ${oIndex + 1}`}
-                            className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          />
+                        {q.options.map((opt: any, oIndex: number) => (
+                          <div key={oIndex} className="flex items-center gap-2">
+                            <input 
+                              value={opt.option_text || opt}
+                              onChange={e => {
+                                const newQuestions = [...questions]
+                                if (typeof opt === 'string') {
+                                  newQuestions[qIndex].options[oIndex] = { option_text: e.target.value, next_question_id: 'no-skip' }
+                                } else {
+                                  newQuestions[qIndex].options[oIndex] = { ...opt, option_text: e.target.value }
+                                }
+                                setQuestions(newQuestions)
+                              }}
+                              placeholder={`Option ${oIndex + 1}`}
+                              className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                            />
+                            <button onClick={() => removeOption(qIndex, oIndex)} className="text-gray-400 hover:text-red-600 p-1">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         ))}
                         <button onClick={() => addOption(qIndex)} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">
                           <Plus size={14} /> Add Option
                         </button>
+
+                        {q.options.length > 0 && (
+                          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <button 
+                              onClick={() => toggleSkipLogic(qIndex)}
+                              className="flex items-center gap-2 text-sm font-bold text-gray-700 hover:text-blue-600"
+                            >
+                              <Settings size={16} />
+                              Skip Logic {expandedSkipLogic[qIndex] ? '▲' : '▼'}
+                            </button>
+                            <p className="text-xs text-gray-500 mt-1">Configure what happens after each option is selected</p>
+
+                            {expandedSkipLogic[qIndex] && (
+                              <div className="mt-3 space-y-3">
+                                {q.options.map((opt: any, oIndex: number) => (
+                                  <div key={oIndex} className="p-3 bg-white rounded-lg border">
+                                    <p className="text-sm font-medium text-gray-800 mb-2">
+                                      When user selects: "{typeof opt === 'string' ? opt : (opt.option_text || `(Empty ${oIndex + 1})`)}"
+                                    </p>
+                                    
+                                    <div className="flex flex-wrap gap-2">
+                                      <button 
+                                        onClick={() => updateOptionSkipLogic(qIndex, oIndex, 'no-skip')}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                                          (opt.next_question_id || 'no-skip') === 'no-skip' 
+                                            ? 'bg-blue-600 text-white' 
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                      >
+                                        No Skip
+                                      </button>
+
+                                      <button 
+                                        onClick={() => updateOptionSkipLogic(qIndex, oIndex, 'end')}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                                          opt.next_question_id === 'end' 
+                                            ? 'bg-red-600 text-white' 
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                      >
+                                        End Survey
+                                      </button>
+
+                                      {questions.map((q2, q2Index) => (
+                                        qIndex !== q2Index && (
+                                          <button
+                                            key={q2Index}
+                                            onClick={() => updateOptionSkipLogic(qIndex, oIndex, q2Index)}
+                                            className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                                              opt.next_question_id === q2Index 
+                                                ? 'bg-green-600 text-white' 
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                          >
+                                            Go to Q{q2Index + 1}
+                                          </button>
+                                        )
+                                      ))}
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 mt-2">
+                                      Currently: {
+                                        opt.next_question_id === 'no-skip' ? 'Continues to next question' :
+                                        opt.next_question_id === 'end' ? 'Ends survey' :
+                                        typeof opt.next_question_id === 'number' ? `Jumps to Q${opt.next_question_id + 1}` :
+                                        'Continues to next question'
+                                      }
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                  </div>
@@ -331,6 +494,20 @@ function CreateSurveyContent() {
                       onReachCalculated={handleReachCalculated}
                     />
                   )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                      <MapPin size={16} className="text-green-600" />
+                      Target Locations (Optional)
+                    </label>
+                    <input 
+                      value={formData.targetLocations.join(', ')}
+                      onChange={e => setFormData({...formData, targetLocations: e.target.value.split(',').map(l => l.trim()).filter(l => l)})}
+                      placeholder="e.g. Lagos, Abuja, Nairobi"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    />
+                    <p className="text-xs text-gray-500">Comma-separated list of cities or regions to target</p>
+                  </div>
                 </div>
 
                 <div className="p-6 bg-blue-600 rounded-3xl text-white shadow-xl shadow-blue-600/20 flex justify-between items-center">
@@ -356,6 +533,8 @@ function CreateSurveyContent() {
                       <SummaryItem label="Questions" value={questions.length} />
                       <SummaryItem label="Max Reach" value={`${formData.rewardLimit} Users`} />
                       <SummaryItem label="Duration" value={`${formData.duration} Hours`} />
+                      {formData.hashtags && <SummaryItem label="Interests" value={formData.hashtags.split(',').length} />}
+                      {formData.targetLocations.length > 0 && <SummaryItem label="Locations" value={formData.targetLocations.length} />}
                    </div>
                 </div>
              </div>
@@ -399,7 +578,40 @@ function CreateSurveyContent() {
                        <div key={i} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
                           <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Q{i+1}</p>
                           <p className="text-xs font-bold text-gray-800">{q.question || 'Placeholder Question'}</p>
-                          <div className="h-10 w-full bg-white rounded-xl border border-gray-100" />
+                          <div className="space-y-2">
+                            {q.question_type === 'text' && (
+                              <div className="h-8 w-full bg-white rounded-lg border border-gray-100" />
+                            )}
+                            {q.question_type === 'multiple_choice' && (
+                              <div className="space-y-2">
+                                {(q.options || []).slice(0, 3).map((opt: any, idx: number) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                                    <span className="text-xs text-gray-600">{typeof opt === 'string' ? opt : (opt.option_text || `Option ${idx + 1}`)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {q.question_type === 'rating' && (
+                              <div className="flex gap-1">
+                                {[1,2,3,4,5].map(star => (
+                                  <Star key={star} size={16} className="text-gray-300" />
+                                ))}
+                              </div>
+                            )}
+                            {q.question_type === 'yes_no' && (
+                              <div className="flex gap-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                                  <span className="text-xs text-gray-600">Yes</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                                  <span className="text-xs text-gray-600">No</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                        </div>
                      ))}
                   </div>
