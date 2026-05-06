@@ -121,7 +121,9 @@ function CreateGameContent() {
         setFormData(prev => ({
           ...prev,
           campaign_name: data.campaign_name || prev.campaign_name,
-          campaign_message: data.campaign_message || prev.campaign_message
+          campaign_message: data.campaign_message || prev.campaign_message,
+          cta_text: data.cta_text || prev.cta_text,
+          game_triggers: data.game_triggers?.join(', ') || prev.game_triggers,
         }))
       }
     } catch (err: any) {
@@ -136,9 +138,14 @@ function CreateGameContent() {
     setTotalHubReach(reach)
   }
 
+  const parseTriggers = () =>
+    formData.game_triggers.split(',').map((t: string) => t.trim().toUpperCase()).filter(Boolean)
+
   const calculateTotalCost = () => {
-    const base = (parseFloat(formData.coin_per_trigger) || 0) * (parseInt(formData.min_influencer_reach) || 0)
-    return formData.is_private ? base * 1.1 : base
+    const triggers = parseTriggers()
+    const coinPerTrigger = parseFloat(formData.coin_per_trigger) || 0
+    const effectiveCoin = formData.is_private ? coinPerTrigger * 1.1 : coinPerTrigger
+    return triggers.length * effectiveCoin * (parseInt(formData.min_influencer_reach) || 0)
   }
 
   const handleLaunch = async () => {
@@ -150,16 +157,35 @@ function CreateGameContent() {
       if (!user) throw new Error('Not authenticated')
       if (!formData.media_url) throw new Error('Please select a campaign image')
 
+      const triggers = parseTriggers()
+      if (triggers.length === 0) throw new Error('Please provide at least one trigger word')
+
+      const coinPerTrigger = parseFloat(formData.coin_per_trigger) || 0
+      if (coinPerTrigger < 5) throw new Error('Coins per trigger must be at least 5')
+
+      const minReach = parseInt(formData.min_influencer_reach) || 0
+      if (formData.is_private && selectedHubs.length === 0) throw new Error('Please select at least one community for a private campaign')
+      if (formData.is_private && minReach > totalHubReach) throw new Error(`Min reach (${minReach}) cannot exceed total hub reach (${totalHubReach})`)
+
+      // Check trigger word availability
+      const { data: availCheck, error: availError } = await supabase.rpc('check_trigger_words_availability', {
+        p_trigger_words: triggers
+      })
+      if (availError) throw new Error('Failed to check trigger word availability')
+      if (!availCheck.available) throw new Error(availCheck.message)
+
+      const effectiveCoin = formData.is_private ? coinPerTrigger * 1.1 : coinPerTrigger
+      const totalBudget = triggers.length * effectiveCoin * minReach
+
       const expiresAt = new Date()
       expiresAt.setHours(expiresAt.getHours() + parseInt(formData.duration_hours))
 
       // 1. Deduct Coins RPC
       const { data: deductData, error: deductError } = await supabase.rpc('deduct_brand_coins_for_game_campaign', {
         p_brand_id: user.id,
-        p_amount: calculateTotalCost(),
+        p_amount: totalBudget,
         p_campaign_name: `Game Campaign: ${formData.campaign_name.trim()}`
       })
-
       if (deductError) throw deductError
 
       // 2. Create the campaign
@@ -167,12 +193,13 @@ function CreateGameContent() {
         .from('game_campaigns')
         .insert({
           brand_id: user.id,
-          campaign_name: formData.campaign_name,
-          campaign_message: formData.campaign_message,
-          campaign_link: formData.campaign_link,
-          cta_text: formData.cta_text,
-          game_triggers: formData.game_triggers,
-          coin_per_trigger: parseFloat(formData.coin_per_trigger),
+          campaign_name: formData.campaign_name.trim(),
+          campaign_message: formData.campaign_message.trim(),
+          campaign_link: formData.campaign_link.trim(),
+          cta_text: formData.cta_text.trim(),
+          game_triggers: triggers,
+          coin_per_trigger: effectiveCoin,
+          min_influencer_reach: minReach,
           media_url: formData.media_url,
           expires_at: expiresAt.toISOString(),
           status: 'active',
@@ -182,14 +209,14 @@ function CreateGameContent() {
         })
         .select()
         .single()
-
       if (campaignError) throw campaignError
 
-      // 3. Link Hubs
+      // 3. Link Hubs via RPC (matches mobile)
       if (formData.is_private && selectedHubs.length > 0) {
-        await supabase.from('game_campaign_hubs').insert(
-          selectedHubs.map(hubId => ({ campaign_id: campaign.id, hub_id: hubId }))
-        )
+        await supabase.rpc('save_game_campaign_hubs', {
+          p_campaign_id: campaign.id,
+          p_hub_ids: selectedHubs
+        })
       }
 
       router.push('/dashboard/campaigns?success=created')
@@ -292,6 +319,18 @@ function CreateGameContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <input name="campaign_link" value={formData.campaign_link} onChange={handleFormDataChange} placeholder="External Link (URL)" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                     <input name="cta_text" value={formData.cta_text} onChange={handleFormDataChange} placeholder="Button Text (e.g. Play Now)" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-gray-500 uppercase tracking-widest">Game Trigger Words *</label>
+                    <input name="game_triggers" value={formData.game_triggers} onChange={handleFormDataChange} placeholder="e.g. PETALS, HEALTH, ZURI (comma separated)" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
+                    <p className="text-[10px] text-gray-400">Separate with commas. These words will appear in the game grid for players to find.</p>
+                    {formData.game_triggers && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {formData.game_triggers.split(',').map((t: string) => t.trim().toUpperCase()).filter(Boolean).map((word: string, i: number) => (
+                          <span key={i} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-black">{word}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
              </div>
