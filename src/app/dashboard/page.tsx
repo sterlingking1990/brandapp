@@ -99,13 +99,13 @@ export default async function DashboardPage() {
   const [{ data: challengeSubs }, { data: unboxSubs }] = await Promise.all([
     supabase
       .from('challenge_submissions')
-      .select('id, created_at, profiles(full_name, username)')
-      .eq('brand_id', brand?.id)
-      .order('created_at', { ascending: false })
+      .select('id, submitted_at, profiles:participant_id(full_name, username), challenges!inner(status_posts!inner(brand_id))')
+      .eq('challenges.status_posts.brand_id', profile?.id)
+      .order('submitted_at', { ascending: false })
       .limit(3),
     supabase
       .from('unboxed_submissions')
-      .select('id, created_at, profiles(full_name, username)')
+      .select('id, created_at, profiles:influencer_id(full_name, username)')
       .eq('brand_id', brand?.id)
       .order('created_at', { ascending: false })
       .limit(3)
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
 
   // Combine and sort recent submissions
   const allRecentSubmissions = [
-    ...(challengeSubs || []).map(s => ({ ...s, type: 'Challenge Entry' })),
+    ...(challengeSubs || []).map(s => ({ ...s, created_at: s.submitted_at, type: 'Challenge Entry' })),
     ...(unboxSubs || []).map(s => ({ ...s, type: 'Unboxing Video' }))
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
    .slice(0, 4)
@@ -322,7 +322,7 @@ export default async function DashboardPage() {
               <h3 className="text-xl font-bold mb-6">Recent Submissions</h3>
               <div className="space-y-4 flex-1">
                 {allRecentSubmissions.length > 0 ? allRecentSubmissions.map((sub: any) => (
-                  <div key={sub.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-all cursor-pointer group border border-transparent hover:border-gray-100">
+                  <Link key={sub.id} href={sub.type === 'Unboxing Video' ? `/dashboard/unbox` : `/dashboard/submissions`} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-all cursor-pointer group border border-transparent hover:border-gray-100">
                     <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${sub.type === 'Unboxing Video' ? 'bg-orange-50 text-orange-600' : 'bg-brand/10 text-brand'}`}>
                        {sub.type === 'Unboxing Video' ? <ShoppingBag size={20} /> : <Video size={20} />}
                     </div>
@@ -331,7 +331,7 @@ export default async function DashboardPage() {
                       <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider">{sub.type}</p>
                     </div>
                     <ChevronRight size={16} className="text-gray-300 group-hover:text-brand" />
-                  </div>
+                  </Link>
                 )) : (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-8 opacity-40">
                      <Clock size={32} className="mb-2" />
