@@ -36,6 +36,10 @@ export default function BrandProfilePage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [showTransactions, setShowTransactions] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showNotifSettings, setShowNotifSettings] = useState(false)
+  const [showPromoRequests, setShowPromoRequests] = useState(false)
   
   const [formData, setFormData] = useState({
     company_name: '',
@@ -238,6 +242,7 @@ export default function BrandProfilePage() {
                     </div>
                  </div>
                  <p className="text-gray-500 font-bold tracking-wide">@{profile?.username}</p>
+                 <p className="text-gray-400 text-sm">{profile?.email}</p>
                  
                  <div className="flex flex-wrap justify-center md:justify-start gap-4 pt-4">
                     <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100">
@@ -322,23 +327,34 @@ export default function BrandProfilePage() {
                  </div>
               )}
 
-              {/* General Settings */}
+              {/* Account Settings */}
               <div className="bg-white rounded-[2.5rem] p-4 border border-gray-100 shadow-sm">
                  <div className="p-4 border-b border-gray-50 mb-2">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Financial & Security</h3>
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Account</h3>
                  </div>
                  <SettingItem icon={<Wallet className="text-emerald-600" />} label="Top Up Coins" sub="Buy more Brandible Coins" href="/dashboard/store" router={router} />
-                 <SettingItem icon={<History className="text-blue-600" />} label="Transaction History" sub="View receipts and invoices" href="/dashboard/transactions" router={router} />
-                 <SettingItem icon={<ShieldCheck className="text-brand" />} label="Account Security" sub="Password and authentication" router={router} />
+                 <SettingItem icon={<History className="text-blue-600" />} label="Transaction History" sub="View receipts and invoices" onClick={() => setShowTransactions(true)} router={router} />
+                 <SettingItem icon={<Bell className="text-orange-600" />} label="My Notifications" sub="View your notifications" onClick={() => setShowNotifications(true)} router={router} />
+                 <SettingItem icon={<ShieldCheck className="text-brand" />} label="Notification Preferences" sub="Configure push and email alerts" onClick={() => setShowNotifSettings(true)} router={router} />
               </div>
 
+              {/* Business Settings */}
               <div className="bg-white rounded-[2.5rem] p-4 border border-gray-100 shadow-sm">
                  <div className="p-4 border-b border-gray-50 mb-2">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Preferences & Support</h3>
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Business</h3>
                  </div>
-                 <SettingItem icon={<Bell className="text-orange-600" />} label="Notifications" sub="Configure push and email alerts" router={router} />
-                 <SettingItem icon={<HelpCircle className="text-purple-600" />} label="Help Center" sub="Frequently asked questions" router={router} />
-                 <SettingItem icon={<MessageCircle className="text-brand" />} label="Join Community" sub="Connect on WhatsApp" router={router} />
+                 <SettingItem icon={<Coins className="text-emerald-600" />} label="Payment Methods" sub="Manage payment options" router={router} />
+                 <SettingItem icon={<Globe className="text-blue-600" />} label="Analytics & Reports" sub="Campaign performance insights" href="/dashboard/analytics" router={router} />
+              </div>
+
+              {/* Support Settings */}
+              <div className="bg-white rounded-[2.5rem] p-4 border border-gray-100 shadow-sm">
+                 <div className="p-4 border-b border-gray-50 mb-2">
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Support</h3>
+                 </div>
+                 <SettingItem icon={<Star className="text-indigo-600" />} label="Promotion Requests" sub="View status of your hub promotion requests" onClick={() => setShowPromoRequests(true)} router={router} />
+                 <SettingItem icon={<HelpCircle className="text-purple-600" />} label="Community Guidelines" sub="Platform rules and policies" router={router} />
+                 <SettingItem icon={<MessageCircle className="text-brand" />} label="Join WhatsApp Channel" sub="Connect with the community" href="https://whatsapp.com/channel/0029Vb7vPtU60eBix1xREK2J" router={router} external />
               </div>
            </div>
 
@@ -388,15 +404,312 @@ export default function BrandProfilePage() {
            </div>
         </div>
       </main>
+      {showTransactions && <TransactionsDrawer onClose={() => setShowTransactions(false)} />}
+      {showNotifications && <NotificationsDrawer onClose={() => setShowNotifications(false)} />}
+      {showNotifSettings && <NotifSettingsDrawer onClose={() => setShowNotifSettings(false)} />}
+      {showPromoRequests && <BrandPromoRequestsDrawer onClose={() => setShowPromoRequests(false)} />}
     </div>
   )
 }
 
-function SettingItem({ icon, label, sub, href, router }: any) {
+function TransactionsDrawer({ onClose }: { onClose: () => void }) {
+  const [transactions, setTransactions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  const isCredit = (type: string) =>
+    ['earned','purchased','released_from_escrow','escrow_released','referral_reward','reward','challenge_reward','achievement_reward'].includes(type)
+
+  useEffect(() => {
+    const fetch = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      setTransactions(data || [])
+      setLoading(false)
+    }
+    fetch()
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <History size={20} className="text-brand" />
+            <h2 className="text-lg font-black text-gray-900">Transaction History</h2>
+          </div>
+          <button onClick={onClose} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          {loading ? (
+            <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand" size={32} /></div>
+          ) : transactions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center pt-20 text-center">
+              <History size={48} className="text-gray-200 mb-4" />
+              <p className="font-bold text-gray-500">No Transactions Yet</p>
+              <p className="text-sm text-gray-400 mt-1">When you buy or spend coins, they'll appear here.</p>
+            </div>
+          ) : transactions.map((tx) => {
+            const credit = isCredit(tx.type)
+            return (
+              <div key={tx.id} className="flex items-center gap-4 bg-gray-50 rounded-2xl p-4">
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${credit ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                  <Coins size={18} className={credit ? 'text-emerald-600' : 'text-red-500'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">{tx.description}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{new Date(tx.created_at).toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-300 capitalize mt-0.5">{tx.type}</p>
+                </div>
+                <span className={`font-black text-sm flex-shrink-0 ${credit ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {credit ? '+' : '-'}{Math.abs(tx.amount)} BC
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NotificationsDrawer({ onClose }: { onClose: () => void }) {
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  const fetch = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    setNotifications(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { fetch() }, [])
+
+  const markAsRead = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <Bell size={20} className="text-brand" />
+            <h2 className="text-lg font-black text-gray-900">Notifications</h2>
+          </div>
+          <button onClick={onClose} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          {loading ? (
+            <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand" size={32} /></div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center pt-20 text-center">
+              <Bell size={48} className="text-gray-200 mb-4" />
+              <p className="font-bold text-gray-500">No Notifications Yet</p>
+            </div>
+          ) : notifications.map((n) => (
+            <div key={n.id} className={`flex items-start gap-4 rounded-2xl p-4 ${n.is_read ? 'bg-gray-50' : 'bg-brand/5 border-l-4 border-brand'}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black text-brand uppercase tracking-widest mb-1">{n.type?.replace(/_/g, ' ')}</p>
+                <p className="text-sm text-gray-800 font-medium">{n.message}</p>
+                <p className="text-xs text-gray-400 mt-1">{new Date(n.created_at).toLocaleString()}</p>
+              </div>
+              {!n.is_read && (
+                <button onClick={() => markAsRead(n.id)} className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-xl bg-brand/10 hover:bg-brand/20 transition-colors">
+                  <Check size={16} className="text-brand" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NotifSettingsDrawer({ onClose }: { onClose: () => void }) {
+  const defaultPrefs = { new_message: true, submission_approved: true, invite_accepted: true, new_campaign: true }
+  const [prefs, setPrefs] = useState(defaultPrefs)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('profiles').select('notification_preferences').eq('id', user.id).single()
+      setPrefs({ ...defaultPrefs, ...(data?.notification_preferences || {}) })
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) await supabase.from('profiles').update({ notification_preferences: prefs }).eq('id', user.id)
+    setSaving(false)
+    onClose()
+  }
+
+  const items = [
+    { key: 'new_message', title: 'New Chat Messages', desc: 'Receive a notification for each new chat message.' },
+    { key: 'submission_approved', title: 'Submission Updates', desc: 'Get notified when a challenge submission is approved or rejected.' },
+    { key: 'invite_accepted', title: 'Campaign Invitations', desc: 'Receive alerts for new private campaign invitations.' },
+    { key: 'new_campaign', title: 'New Campaigns', desc: 'Get notified when new campaigns are available.' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <ShieldCheck size={20} className="text-brand" />
+            <h2 className="text-lg font-black text-gray-900">Notification Preferences</h2>
+          </div>
+          <button onClick={onClose} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand" size={32} /></div>
+          ) : (
+            <div className="bg-gray-50 rounded-2xl divide-y divide-gray-100">
+              {items.map(({ key, title, desc }) => (
+                <div key={key} className="flex items-center justify-between p-4 gap-4">
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-800 text-sm">{title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => setPrefs(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                    className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${prefs[key as keyof typeof prefs] ? 'bg-brand' : 'bg-gray-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full shadow transition-transform ${prefs[key as keyof typeof prefs] ? 'translate-x-5' : ''}`} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-6 border-t border-gray-100">
+          <button onClick={save} disabled={saving}
+            className="w-full py-3.5 bg-brand text-white font-black rounded-2xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Save Changes</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BrandPromoRequestsDrawer({ onClose }: { onClose: () => void }) {
+  const [requests, setRequests] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: brand } = await supabase.from('brands').select('id').eq('profile_id', user.id).single()
+      if (!brand) return
+      const { data } = await supabase
+        .from('promotion_requests')
+        .select('*, hubs:hub_id(name)')
+        .eq('brand_id', brand.id)
+        .order('created_at', { ascending: false })
+      setRequests(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const statusColor: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-700',
+    accepted: 'bg-emerald-100 text-emerald-700',
+    declined: 'bg-red-100 text-red-700',
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <Star size={20} className="text-brand" />
+            <h2 className="text-lg font-black text-gray-900">Promotion Requests</h2>
+          </div>
+          <button onClick={onClose} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {loading ? (
+            <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand" size={32} /></div>
+          ) : requests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center pt-20 text-center">
+              <Star size={48} className="text-gray-200 mb-4" />
+              <p className="font-bold text-gray-500">No Requests Sent Yet</p>
+              <p className="text-sm text-gray-400 mt-1">Go to a hub and send a promotion request to a hub owner.</p>
+            </div>
+          ) : requests.map((req) => (
+            <div key={req.id} className="bg-gray-50 rounded-2xl p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-gray-900">{req.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Hub: {req.hubs?.name || '—'}</p>
+                </div>
+                <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg flex-shrink-0 ${statusColor[req.status]}`}>{req.status}</span>
+              </div>
+              <p className="text-sm text-gray-500 leading-relaxed">{req.description}</p>
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <span className="font-bold text-emerald-600">{req.reward_amount} BC reward</span>
+                <span>{new Date(req.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SettingItem({ icon, label, sub, href, router, external, onClick }: any) {
+  const handleClick = () => {
+    if (onClick) return onClick()
+    if (!href) return
+    if (external) window.open(href, '_blank')
+    else router.push(href)
+  }
   return (
     <button 
       className="w-full flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-all group"
-      onClick={() => href && router.push(href)}
+      onClick={handleClick}
     >
        <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-gray-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform group-hover:bg-white border border-transparent group-hover:border-gray-100">
