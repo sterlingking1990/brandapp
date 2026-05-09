@@ -96,7 +96,7 @@ export default function AnalyticsPage() {
         .from('unboxed_submissions')
         .select('hub_id, total_sales_count, hubs(name)')
         .eq('brand_id', brandData.id)
-        .eq('status', 'approved')
+        .in('status', ['approved', 'inactive'])
 
       const hubPerformance: any[] = []
       unboxHubs?.forEach(item => {
