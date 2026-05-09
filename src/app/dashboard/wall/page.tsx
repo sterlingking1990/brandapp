@@ -79,52 +79,58 @@ export default function BrandWallPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: brandData } = await supabase
+      const { data: brandData, error: brandError } = await supabase
         .from('brands')
         .select(`
           id,
           company_name,
           profile_id,
-          profiles:profile_id (username, brandible_coins)
+          profiles(username, brandible_coins)
         `)
         .eq('profile_id', user.id)
-        .single()
+        .maybeSingle()
 
-      if (brandData) {
-        // Flatten profiles data
-        const processedBrand = {
-          ...brandData,
-          username: (brandData.profiles as any)?.username,
-          brandible_coins: (brandData.profiles as any)?.brandible_coins
-        }
-        setBrand(processedBrand)
-        
-        // Fetch Media
-        const { data: mediaData } = await supabase
+      if (brandError) { console.error('Brand fetch error:', brandError); return }
+      if (!brandData) { console.warn('No brand record found for user:', user.id); return }
+
+      const processedBrand = {
+        id: brandData.id,
+        company_name: brandData.company_name,
+        profile_id: user.id,
+        username: (brandData as any).profiles?.username,
+        brandible_coins: (brandData as any).profiles?.brandible_coins || 0
+      }
+      setBrand(processedBrand)
+
+      // Fetch all three in parallel, log individual errors
+      const [mediaRes, ytRes, fbRes] = await Promise.all([
+        supabase
           .from('brand_wall_media_with_ad_details')
           .select('*')
           .eq('brand_id', brandData.id)
-          .order('created_at', { ascending: false })
-        setMedia(mediaData || [])
-
-        // Fetch YouTube Ads
-        const { data: ytAds } = await supabase
+          .order('created_at', { ascending: false }),
+        supabase
           .from('youtube_ads')
           .select('*')
           .eq('brand_id', brandData.id)
-          .order('created_at', { ascending: false })
-        setYoutubeAds(ytAds || [])
-
-        // Fetch Facebook Ads
-        const { data: fbAds } = await supabase
+          .neq('status', 'error')
+          .order('created_at', { ascending: false }),
+        supabase
           .from('facebook_ads')
           .select('*')
           .eq('brand_id', brandData.id)
-          .order('created_at', { ascending: false })
-        setFacebookAds(fbAds || [])
-      }
+          .order('created_at', { ascending: false }),
+      ])
+
+      if (mediaRes.error) console.error('Wall media error:', mediaRes.error)
+      if (ytRes.error) console.error('YouTube ads error:', ytRes.error)
+      if (fbRes.error) console.error('Facebook ads error:', fbRes.error)
+
+      setMedia(mediaRes.data || [])
+      setYoutubeAds(ytRes.data || [])
+      setFacebookAds(fbRes.data || [])
     } catch (err) {
-      console.error(err)
+      console.error('fetchBrandAndData error:', err)
     } finally {
       setLoading(false)
     }

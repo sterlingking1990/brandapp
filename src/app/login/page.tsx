@@ -35,60 +35,100 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full space-y-8 glass-card p-10 rounded-2xl">
-        <div className="text-center">
-          <div className="mx-auto h-20 w-20 overflow-hidden rounded-2xl mb-4">
-            <img src="/logo.png" alt="brandible" className="h-full w-full object-contain" />
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Left: Hero Panel */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-900 relative overflow-hidden flex-col justify-between p-16">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-brand/40 via-transparent to-transparent" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand/20 rounded-full blur-3xl -ml-32 -mb-32" />
+        <div className="relative z-10">
+          <div className="h-12 w-12 overflow-hidden rounded-2xl mb-12">
+            <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
           </div>
-          <h2 className="text-3xl font-extrabold text-gray-900">Brand Portal</h2>
-          <p className="mt-2 text-sm text-gray-600">Sign in to manage your campaigns</p>
+          <p className="text-brand font-black text-xs uppercase tracking-[0.3em] mb-4">Brandible for Brands</p>
+          <h1 className="text-5xl font-black text-white leading-tight">
+            Reach the right<br />audience, every<br /><span className="text-brand">single time.</span>
+          </h1>
+          <p className="text-white/50 mt-6 text-lg leading-relaxed max-w-sm">
+            Launch campaigns, discover top creators, and grow your brand with a community that's built to engage.
+          </p>
         </div>
-
-        {message && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-            {message}
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              <input type="email" required placeholder="Email address"
-                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all"
-                value={email} onChange={(e) => setEmail(e.target.value)} />
+        <div className="relative z-10 space-y-6">
+          {[
+            { icon: '🚀', title: 'Launch in minutes', desc: 'Create status, challenge, survey, or game campaigns with a few clicks.' },
+            { icon: '🎯', title: 'Target the right creators', desc: 'Find and invite verified micro-influencers who match your brand.' },
+            { icon: '📊', title: 'Real-time analytics', desc: 'Track views, engagements, and campaign ROI from one dashboard.' },
+            { icon: '🛍️', title: 'Sell through your community', desc: 'List products in the marketplace and let influencers drive sales.' },
+          ].map((item) => (
+            <div key={item.title} className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-lg flex-shrink-0">{item.icon}</div>
+              <div>
+                <p className="text-white font-bold text-sm">{item.title}</p>
+                <p className="text-white/40 text-xs mt-0.5">{item.desc}</p>
+              </div>
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              <input type={showPassword ? 'text' : 'password'} required placeholder="Password"
-                className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all"
-                value={password} onChange={(e) => setPassword(e.target.value)} />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 transition-colors">
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
+          ))}
+        </div>
+        <div className="relative z-10 pt-8 border-t border-white/10">
+          <p className="text-white/30 text-xs font-bold uppercase tracking-widest">&ldquo;The platform that turns influence into measurable growth.&rdquo;</p>
+        </div>
+      </div>
+
+      {/* Right: Form Panel */}
+      <div className="flex-1 flex items-center justify-center bg-gray-50 px-6 py-12">
+        <div className="max-w-md w-full space-y-8">
+          <div className="lg:hidden flex justify-center mb-4">
+            <div className="h-14 w-14 overflow-hidden rounded-2xl">
+              <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
             </div>
           </div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-gray-900">Welcome back</h2>
+            <p className="mt-2 text-sm text-gray-500">Sign in to your brand account</p>
+          </div>
 
-          <button type="submit" disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-lg text-white brand-gradient hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand transition-all disabled:opacity-50">
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign in'}
-          </button>
-        </form>
+          {message && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
 
-        <p className="mt-8 text-center text-sm text-gray-600">
-          New brand?{' '}
-          <Link href="/signup" className="font-semibold text-brand hover:text-brand-dark transition-colors">
-            Create an account
-          </Link>
-        </p>
+          <form className="space-y-6" onSubmit={handleLogin}>
+            <div className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input type="email" required placeholder="Business email"
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all"
+                  value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input type={showPassword ? 'text' : 'password'} required placeholder="Password"
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all"
+                  value={password} onChange={(e) => setPassword(e.target.value)} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 transition-colors">
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-lg text-white brand-gradient hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand transition-all disabled:opacity-50">
+              {loading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign in'}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-gray-600">
+            New to Brandible?{' '}
+            <Link href="/signup" className="font-semibold text-brand hover:text-brand-dark transition-colors">
+              Create a brand account
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -44,7 +44,7 @@ export default async function DashboardPage() {
     .from('brands')
     .select('*')
     .eq('profile_id', user.id)
-    .single()
+    .maybeSingle()
 
   // Fetch Stats data matching mobile app logic (uses user.id as brand_id in posts/games)
   const [postsRes, gameRes] = await Promise.all([
