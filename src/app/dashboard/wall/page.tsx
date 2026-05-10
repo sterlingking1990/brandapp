@@ -25,9 +25,12 @@ import {
   UploadCloud,
   Globe,
   Pause,
-  Copy
+  Copy,
+  Users,
+  Coins
 } from 'lucide-react'
 import { uploadBrandWallMedia, generateVideoThumbnail, uploadThumbnail } from '@/utils/media'
+import HubSelector from '@/components/HubSelector'
 import { manageYouTubeAd, manageFacebookAd } from '@/utils/adApi'
 import Toast from '@/components/Toast'
 import BrandWallAnalytics from '@/components/BrandWallAnalytics'
@@ -50,6 +53,10 @@ export default function BrandWallPage() {
   
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [caption, setCaption] = useState('')
+  const [targetedHubs, setTargetedHubs] = useState<string[]>([])
+  const [hubReach, setHubReach] = useState(0)
+  const [hubTotalFee, setHubTotalFee] = useState(0)
+  const [hubsData, setHubsData] = useState<Record<string, any>>({})
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   
@@ -187,13 +194,25 @@ export default function BrandWallPage() {
 
       if (error) throw error
 
+      // Attach hub targeting if any hubs selected
+      if (targetedHubs.length > 0 && inserted?.[0]?.id) {
+        const { data: hubResult, error: hubError } = await supabase.rpc('attach_hubs_to_wall_post', {
+          p_media_id: inserted[0].id,
+          p_hub_ids: targetedHubs
+        })
+        if (hubError) console.error('Hub targeting error:', hubError)
+        else if (!hubResult.success) alert(hubResult.message)
+      }
+
       setToastMessage('Posted to your wall!')
       setShowToast(true)
       setShowUploadModal(false)
       setCaption('')
       setSelectedFile(null)
       setPreviewUrl(null)
-      fetchBrandAndData() // Refresh data
+      setTargetedHubs([])
+      setHubTotalFee(0)
+      fetchBrandAndData()
     } catch (err: any) {
       alert(err.message)
     } finally {
@@ -680,17 +699,17 @@ export default function BrandWallPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-           <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h3 className="text-2xl font-black text-gray-900">New Wall Post</h3>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm">
+           <div className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] w-full sm:max-w-lg max-h-[92vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between shrink-0">
+                 <h3 className="text-xl font-black text-gray-900">New Wall Post</h3>
                  <button onClick={() => setShowUploadModal(false)} className="text-gray-400 hover:text-gray-600">
                     <X size={24} />
                  </button>
               </div>
               
-              <div className="p-8 space-y-6">
-                 <div className="aspect-video bg-gray-100 rounded-[2rem] overflow-hidden relative border border-gray-100">
+              <div className="p-6 space-y-5 overflow-y-auto scrollbar-hide">
+                 <div className="aspect-video bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-100">
                     {selectedFile?.type.startsWith('video') ? (
                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
                          <Play size={40} />
@@ -711,6 +730,33 @@ export default function BrandWallPage() {
                     />
                  </div>
 
+                 {/* Hub Targeting */}
+                 <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Target Communities (Optional)</label>
+                       {hubTotalFee > 0 && (
+                         <span className="text-[10px] font-black text-brand bg-brand/10 px-2 py-1 rounded-lg flex items-center gap-1">
+                           <Coins size={10} /> {hubTotalFee} coins
+                         </span>
+                       )}
+                    </div>
+                    <HubSelector
+                      selectedHubIds={targetedHubs}
+                      onHubsSelected={setTargetedHubs}
+                      onReachCalculated={(reach, fee, data) => {
+                        setHubReach(reach)
+                        setHubTotalFee(fee || 0)
+                        if (data) setHubsData(data)
+                      }}
+                      showFees
+                    />
+                    {targetedHubs.length > 0 && (
+                      <p className="text-[10px] text-gray-400 px-1">
+                        Reaching ~{hubReach} members · {hubTotalFee} coins will be charged (80% goes to hub owners)
+                      </p>
+                    )}
+                 </div>
+
                  <button 
                    onClick={handleUpload}
                    disabled={uploading}
@@ -719,7 +765,7 @@ export default function BrandWallPage() {
                     {uploading ? <Loader2 className="animate-spin" size={24} /> : (
                       <>
                         <UploadCloud size={20} />
-                        POST TO WALL
+                        {hubTotalFee > 0 ? `POST TO WALL · ${hubTotalFee} COINS` : 'POST TO WALL'}
                       </>
                     )}
                  </button>
