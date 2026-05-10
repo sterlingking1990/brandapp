@@ -86,12 +86,12 @@ function CreateGameContent() {
       const fileName = `${brand.id}/${timestamp}_${file.name}`
 
       const { error: uploadError } = await supabase.storage
-        .from('brand-wall')
+        .from('game_campaigns')
         .upload(fileName, file)
 
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from('brand-wall').getPublicUrl(fileName)
+      const { data: urlData } = supabase.storage.from('game_campaigns').getPublicUrl(fileName)
       
       setFormData({ ...formData, media_url: urlData.publicUrl })
     } catch (err: any) {
@@ -136,6 +136,7 @@ function CreateGameContent() {
 
   const handleReachCalculated = (reach: number) => {
     setTotalHubReach(reach)
+    if (reach > 0) setFormData(prev => ({ ...prev, min_influencer_reach: String(reach) }))
   }
 
   const parseTriggers = () =>
