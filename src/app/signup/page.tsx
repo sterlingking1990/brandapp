@@ -161,14 +161,41 @@ export default function SignUpPage() {
         </div>
       </div>
 
+      {/* Mobile Hero — visible only below lg */}
+      <div className="lg:hidden bg-gray-900 relative overflow-hidden px-8 pt-10 pb-12">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-brand/40 via-transparent to-transparent" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-10 w-10 overflow-hidden rounded-xl flex-shrink-0">
+              <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
+            </div>
+            <p className="text-brand font-black text-xs uppercase tracking-[0.3em]">Brandible for Brands</p>
+          </div>
+          <h1 className="text-3xl font-black text-white leading-tight mb-3">
+            Sell to communities that are already<br /><span className="text-brand">ready to buy.</span>
+          </h1>
+          <p className="text-white/50 text-sm leading-relaxed mb-6">
+            Direct access to hub communities of active buyers. Run campaigns, drive sales, and see every result &mdash; all in one place.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: '🚀', label: 'Multiple campaign formats' },
+              { icon: '🎯', label: 'Target the right hub' },
+              { icon: '📊', label: 'Measure everything' },
+              { icon: '🛍️', label: 'Sell on the platform' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2">
+                <span className="text-base">{item.icon}</span>
+                <span className="text-white/80 text-xs font-semibold leading-tight">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Right: Form Panel */}
       <div className="flex-1 flex items-center justify-center bg-gray-50 px-6 py-12">
         <div className="max-w-md w-full space-y-8">
-          <div className="lg:hidden flex justify-center mb-4">
-            <div className="h-14 w-14 overflow-hidden rounded-2xl">
-              <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
-            </div>
-          </div>
           <div>
             <h2 className="text-3xl font-extrabold text-gray-900">Partner with us</h2>
             <p className="mt-2 text-sm text-gray-600">Create your brand account in minutes</p>
