@@ -18,7 +18,7 @@ export default function NewCampaignTypePage() {
     {
       id: 'challenge',
       title: 'Video Challenge',
-      description: 'Ask influencers to create video content based on your prompt.',
+      description: 'Ask members to create video content based on your prompt.',
       icon: <Megaphone size={32} />,
       color: 'bg-brand/10 text-brand',
       href: '/dashboard/campaigns/new/challenge'
@@ -91,7 +91,7 @@ export default function NewCampaignTypePage() {
           <div>
             <h4 className="font-bold text-brand">Pro Tip</h4>
             <p className="text-sm text-brand/80 mt-1">
-              Status updates are the best way to keep your brand at the top of the influencer wall. 
+              Status updates are the best way to keep your brand at the top of the member wall.
               Aim for at least 2 updates a week for maximum visibility.
             </p>
           </div>

@@ -132,20 +132,20 @@ export default function SignUpPage() {
           <div className="h-12 w-12 overflow-hidden rounded-2xl mb-12">
             <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
           </div>
-          <p className="text-brand font-black text-xs uppercase tracking-[0.3em] mb-4">Brandible for Brands</p>
-          <h1 className="text-5xl font-black text-white leading-tight">
-            Your brand.<br />Their audience.<br /><span className="text-brand">Real results.</span>
+          <p className="text-brand font-black text-xs uppercase tracking-[0.3em] mb-6">Brandible for Brands</p>
+          <h1 className="text-5xl font-black text-white leading-[1.1]">
+            Sell to communities<br />that are already<br /><span className="text-brand">ready to buy.</span>
           </h1>
-          <p className="text-white/50 mt-6 text-lg leading-relaxed max-w-sm">
-            Join hundreds of brands using Brandible to run campaigns, engage creators, and grow their community.
+          <p className="text-white/50 mt-8 text-base leading-relaxed max-w-sm">
+            Brandible gives you direct access to hub communities of active buyers. Run campaigns, drive sales, and see every result &mdash; all in one place.
           </p>
         </div>
         <div className="relative z-10 space-y-6">
           {[
-            { icon: <Megaphone size={18} />, title: 'Multi-format campaigns', desc: 'Run status posts, challenges, surveys, games, and affiliate deals — all in one place.' },
-            { icon: <Users size={18} />, title: 'Access verified creators', desc: 'Tap into a network of engaged micro-influencers ready to represent your brand.' },
-            { icon: <BarChart3 size={18} />, title: 'Measure everything', desc: 'Get real-time data on reach, engagement, and spend across every campaign.' },
-            { icon: <ShoppingBag size={18} />, title: 'Sell through the marketplace', desc: 'List your products and let influencers purchase and promote them with earned coins.' },
+            { icon: <Megaphone size={18} />, title: 'Multiple campaign formats', desc: 'Status views, challenges, surveys, games, and unboxing promotion requests.' },
+            { icon: <Users size={18} />, title: 'Target the right hub', desc: 'Pay to reach hub communities whose members already match your buyer profile.' },
+            { icon: <BarChart3 size={18} />, title: 'Measure everything', desc: 'Real-time data on views, clicks, shares, spend, and campaign ROI.' },
+            { icon: <ShoppingBag size={18} />, title: 'Sell on the platform', desc: 'List products and let community members discover and buy directly from your brand.' },
           ].map((item) => (
             <div key={item.title} className="flex items-start gap-4">
               <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-brand flex-shrink-0">{item.icon}</div>
@@ -157,7 +157,7 @@ export default function SignUpPage() {
           ))}
         </div>
         <div className="relative z-10 pt-8 border-t border-white/10">
-          <p className="text-white/30 text-xs font-bold uppercase tracking-widest">&ldquo;The platform that turns influence into measurable growth.&rdquo;</p>
+          <p className="text-white/30 text-xs font-bold uppercase tracking-widest">&ldquo;Where brands reach buyers &mdash; not just followers.&rdquo;</p>
         </div>
       </div>
 

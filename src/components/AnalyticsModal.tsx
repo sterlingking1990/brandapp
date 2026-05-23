@@ -95,7 +95,7 @@ export default function AnalyticsModal({ isOpen, onClose, campaign }: AnalyticsM
              <div>
                 <p className="text-sm font-bold text-gray-900">Real-time Performance</p>
                 <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  Influencers are actively engaging with this {campaign.type.toLowerCase()}. Review your <span className="text-brand font-bold">ROI metrics</span> above to see how your budget is being converted into brand reach.
+                  Members are actively engaging with this {campaign.type.toLowerCase()}. Review your <span className="text-brand font-bold">ROI metrics</span> above to see how your budget is being converted into brand reach.
                 </p>
              </div>
           </div>

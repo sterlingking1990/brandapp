@@ -146,7 +146,7 @@ function CampaignsContent() {
             <div className="glass-card rounded-[2rem] p-20 text-center">
               <div className="h-20 w-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-6"><Megaphone className="text-gray-400" size={32} /></div>
               <h3 className="text-xl font-bold text-gray-900">No campaigns found</h3>
-              <p className="text-gray-500 mt-2 max-w-sm mx-auto">Start reaching influencers by launching your first challenge or survey.</p>
+              <p className="text-gray-500 mt-2 max-w-sm mx-auto">Start reaching members by launching your first challenge or survey.</p>
             </div>
           )}
         </div>

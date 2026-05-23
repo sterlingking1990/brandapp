@@ -323,7 +323,7 @@ function HubCard({ hub, unboxedItems, onTarget }: { hub: any, unboxedItems: any[
        </div>
 
        <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed mb-6">
-         {hub.description || "A vibrant community of creative influencers collaborating and growing together on brandible."}
+         {hub.description || "A vibrant community of buyers collaborating and growing together on brandible."}
        </p>
 
        {hub.keywords && hub.keywords.length > 0 && (

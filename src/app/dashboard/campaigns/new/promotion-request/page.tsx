@@ -202,7 +202,7 @@ function CreatePromotionRequestContent() {
                 value={formData.description}
                 onChange={handleFormDataChange}
                 rows={5}
-                placeholder="What do you want the influencer to highlight? Any specific talking points?"
+                placeholder="What do you want the member to highlight? Any specific talking points?"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
               />
             </div>

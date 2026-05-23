@@ -480,7 +480,7 @@ export default function UnboxReviewPage() {
                    <span className="font-bold text-gray-900">{selectedSubmission.total_sales_count}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                   <span className="text-xs font-bold text-gray-400 uppercase">Influencer Earned</span>
+                   <span className="text-xs font-bold text-gray-400 uppercase">Member Earned</span>
                    <span className="font-bold text-gray-900">{selectedSubmission.total_earned_by_influencer} BC</span>
                 </div>
              </div>

@@ -261,7 +261,7 @@ function CreateSurveyContent() {
 
           <header>
             <h1 className="text-2xl font-bold text-gray-900">Create Market Survey</h1>
-            <p className="text-gray-500">Gather insights from targeted influencer communities.</p>
+            <p className="text-gray-500">Gather insights from targeted member communities.</p>
           </header>
 
           {error && (
@@ -289,7 +289,7 @@ function CreateSurveyContent() {
                       value={formData.description}
                       onChange={e => setFormData({...formData, description: e.target.value})}
                       rows={4}
-                      placeholder="Tell influencers what this survey is about..."
+                      placeholder="Tell members what this survey is about..."
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     />
                   </div>

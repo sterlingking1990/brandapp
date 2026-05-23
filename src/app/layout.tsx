@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Brandible | Brand Portal",
-  description: "Manage your brand campaigns and influencer relations",
+  description: "Manage your brand campaigns and community relations",
 };
 
 export default function RootLayout({

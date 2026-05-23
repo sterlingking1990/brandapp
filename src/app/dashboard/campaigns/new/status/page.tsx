@@ -305,7 +305,7 @@ function CreateStatusContent() {
 
           <header>
             <h1 className="text-2xl font-bold text-gray-900">Push Status Update</h1>
-            <p className="text-gray-500">Reward influencers for viewing and sharing your story.</p>
+            <p className="text-gray-500">Reward members for viewing and sharing your story.</p>
           </header>
 
           {error && (
@@ -371,7 +371,7 @@ function CreateStatusContent() {
                 </div>
                 <div className="space-y-4">
                   <input name="title" value={formData.title} onChange={handleFormDataChange} placeholder="Catchy Headline (e.g. New Summer Collection is Here!)" className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-brand outline-none transition-all" />
-                  <textarea name="description" value={formData.description} onChange={handleFormDataChange} rows={6} placeholder="What do you want to share with influencers? Keep it short and impactful." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
+                  <textarea name="description" value={formData.description} onChange={handleFormDataChange} rows={6} placeholder="What do you want to share with members? Keep it short and impactful." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all" />
                 </div>
              </div>
           )}
@@ -489,7 +489,7 @@ function CreateStatusContent() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-8 space-y-3">
                        <h4 className="text-xl font-black text-white leading-tight">{formData.title || 'Status Title'}</h4>
-                       <p className="text-xs text-white/70 leading-relaxed line-clamp-3 italic">"{formData.description || 'Your message will appear here for influencers...'}"</p>
+                       <p className="text-xs text-white/70 leading-relaxed line-clamp-3 italic">"{formData.description || 'Your message will appear here for members...'}"</p>
                        <div className="pt-4 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                              <Coins size={14} className="text-brand" />

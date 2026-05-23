@@ -44,20 +44,20 @@ function LoginForm() {
           <div className="h-12 w-12 overflow-hidden rounded-2xl mb-12">
             <img src="/logo.png" alt="Brandible" className="h-full w-full object-contain" />
           </div>
-          <p className="text-brand font-black text-xs uppercase tracking-[0.3em] mb-4">Brandible for Brands</p>
-          <h1 className="text-5xl font-black text-white leading-tight">
-            Reach the right<br />audience, every<br /><span className="text-brand">single time.</span>
+          <p className="text-brand font-black text-xs uppercase tracking-[0.3em] mb-6">Brandible for Brands</p>
+          <h1 className="text-5xl font-black text-white leading-[1.1]">
+            Put your brand<br />in front of people<br /><span className="text-brand">who actually buy.</span>
           </h1>
-          <p className="text-white/50 mt-6 text-lg leading-relaxed max-w-sm">
-            Launch campaigns, discover top creators, and grow your brand with a community that's built to engage.
+          <p className="text-white/50 mt-8 text-base leading-relaxed max-w-sm">
+            Brandible connects you to hub communities of active buyers. Run targeted campaigns, reward engagement, and sell directly &mdash; all tracked in real time.
           </p>
         </div>
         <div className="relative z-10 space-y-6">
           {[
-            { icon: '🚀', title: 'Launch in minutes', desc: 'Create status, challenge, survey, or game campaigns with a few clicks.' },
-            { icon: '🎯', title: 'Target the right creators', desc: 'Find and invite verified micro-influencers who match your brand.' },
-            { icon: '📊', title: 'Real-time analytics', desc: 'Track views, engagements, and campaign ROI from one dashboard.' },
-            { icon: '🛍️', title: 'Sell through your community', desc: 'List products in the marketplace and let influencers drive sales.' },
+            { icon: '🎯', title: 'Target buyer communities', desc: 'Choose hubs whose members already match your product niche and buyer profile.' },
+            { icon: '🚀', title: 'Multiple campaign types', desc: 'Status views, challenges, surveys, games, and unboxing promotion requests.' },
+            { icon: '📊', title: 'Real-time analytics', desc: 'Track spend, views, clicks, shares, and engagement as they happen.' },
+            { icon: '🛍️', title: 'Sell on the platform', desc: 'List your products and let community members discover and buy directly.' },
           ].map((item) => (
             <div key={item.title} className="flex items-start gap-4">
               <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-lg flex-shrink-0">{item.icon}</div>
@@ -69,7 +69,7 @@ function LoginForm() {
           ))}
         </div>
         <div className="relative z-10 pt-8 border-t border-white/10">
-          <p className="text-white/30 text-xs font-bold uppercase tracking-widest">&ldquo;The platform that turns influence into measurable growth.&rdquo;</p>
+          <p className="text-white/30 text-xs font-bold uppercase tracking-widest">&ldquo;Where brands reach buyers &mdash; not just followers.&rdquo;</p>
         </div>
       </div>
 

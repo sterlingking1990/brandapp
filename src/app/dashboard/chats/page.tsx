@@ -227,7 +227,7 @@ function ChatMessagesContent() {
 
   const handleRecordSale = async () => {
     if (!selectedChatId) return
-    if (!confirm('This will reward the influencer from your escrowed budget. Continue?')) return
+    if (!confirm('This will reward the member from your escrowed budget. Continue?')) return
 
     setIsProcessingSale(true)
     try {
@@ -237,7 +237,7 @@ function ChatMessagesContent() {
 
       if (error) throw error
       if (data.success) {
-        alert('Sale recorded and influencer rewarded!')
+        alert('Sale recorded and member rewarded!')
         fetchInitialData()
       } else {
         alert(data.message || 'Failed to record sale')
@@ -425,7 +425,7 @@ function ChatMessagesContent() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Did this chat lead to a sale?</p>
-                      <p className="text-xs text-gray-500 mt-1">Use this once the influencer sale has been confirmed.</p>
+                      <p className="text-xs text-gray-500 mt-1">Use this once the member sale has been confirmed.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -517,7 +517,7 @@ function ChatMessagesContent() {
              </div>
              <div className="space-y-2">
                 <h3 className="text-2xl font-black text-gray-900 tracking-tight">Select a Chat</h3>
-                <p className="text-gray-500 max-w-sm mx-auto font-medium leading-relaxed">Choose an influencer from the list on the left to start coordinating your campaign.</p>
+                <p className="text-gray-500 max-w-sm mx-auto font-medium leading-relaxed">Choose a member from the list on the left to start coordinating your campaign.</p>
              </div>
              <button 
                onClick={() => router.push('/dashboard/hubs')}

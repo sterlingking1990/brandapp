@@ -149,7 +149,7 @@ function CreateChallengeContent() {
 
           <header>
             <h1 className="text-2xl font-bold text-gray-900">Create Video Challenge</h1>
-            <p className="text-gray-500">Request custom content from influencers.</p>
+            <p className="text-gray-500">Request custom content from members.</p>
           </header>
 
           {error && (
@@ -179,7 +179,7 @@ function CreateChallengeContent() {
                       value={formData.description}
                       onChange={handleFormDataChange}
                       rows={4}
-                      placeholder="Tell influencers what this challenge is about..."
+                      placeholder="Tell members what this challenge is about..."
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-all"
                     />
                   </div>
@@ -316,7 +316,7 @@ function CreateChallengeContent() {
                     </div>
                     <div>
                        <h4 className="text-xl font-black text-gray-900 leading-tight">{formData.title || 'Untitled Challenge'}</h4>
-                       <p className="text-xs text-gray-500 mt-2 leading-relaxed italic line-clamp-4 px-4">{formData.challengePrompt || 'Your challenge instructions will appear here for influencers...'}</p>
+                       <p className="text-xs text-gray-500 mt-2 leading-relaxed italic line-clamp-4 px-4">{formData.challengePrompt || 'Your challenge instructions will appear here for members...'}</p>
                     </div>
                     <div className="w-full pt-8 border-t border-gray-50">
                        <div className="flex justify-center items-baseline gap-1">
