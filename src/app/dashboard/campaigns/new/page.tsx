@@ -1,12 +1,13 @@
 'use client'
 
-import { 
-  Megaphone, 
-  ClipboardList, 
-  Gamepad2, 
+import {
+  Megaphone,
+  ClipboardList,
+  Gamepad2,
   ArrowLeft,
   ChevronRight,
-  Send
+  Send,
+  Zap
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -46,6 +47,14 @@ export default function NewCampaignTypePage() {
       icon: <Gamepad2 size={32} />,
       color: 'bg-purple-100 text-purple-600',
       href: '/dashboard/campaigns/new/game'
+    },
+    {
+      id: 'activation',
+      title: 'Activation Campaign',
+      description: 'Let members sell your digital product and earn commission on every payment.',
+      icon: <Zap size={32} />,
+      color: 'bg-amber-100 text-amber-600',
+      href: '/dashboard/campaigns/new/activation'
     }
   ]
 
@@ -64,7 +73,7 @@ export default function NewCampaignTypePage() {
           <p className="text-gray-500 mt-2">What kind of engagement are you looking for today?</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {campaignTypes.map((type) => (
             <Link 
               key={type.id}
