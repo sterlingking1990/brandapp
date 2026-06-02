@@ -283,28 +283,34 @@ export default function ActivationCampaignDashboard({ params }: { params: { id: 
           </div>
         </div>
 
-        {/* Verification report — show if changes requested */}
-        {campaign.verification_status === 'changes_requested' && campaign.verification_report && (
+        {/* Verification report — show if changes requested or pending */}
+        {(campaign.verification_status === 'changes_requested' || campaign.verification_status === 'pending') && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={18} className="text-amber-600" />
-              <h3 className="font-bold text-amber-900">Changes Required Before Going Live</h3>
+              <h3 className="font-bold text-amber-900">
+                {campaign.verification_status === 'pending' ? 'Campaign Not Yet Submitted' : 'Changes Required Before Going Live'}
+              </h3>
             </div>
-            <p className="text-sm text-amber-800 mb-3">{(campaign.verification_report as any).summary}</p>
-            {((campaign.verification_report as any).flags as string[])?.length > 0 && (
-              <ul className="space-y-1 mb-4">
-                {((campaign.verification_report as any).flags as string[]).map((flag: string, i: number) => (
-                  <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
-                    <span className="text-amber-500 mt-0.5">•</span> {flag}
-                  </li>
-                ))}
-              </ul>
+            {campaign.verification_report && (
+              <>
+                <p className="text-sm text-amber-800 mb-3">{(campaign.verification_report as any).summary}</p>
+                {((campaign.verification_report as any).flags as string[])?.length > 0 && (
+                  <ul className="space-y-1 mb-4">
+                    {((campaign.verification_report as any).flags as string[]).map((flag: string, i: number) => (
+                      <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
+                        <span className="text-amber-500 mt-0.5">•</span> {flag}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
             <button
               onClick={() => router.push(`/dashboard/campaigns/activation/${id}/edit`)}
               className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors"
             >
-              <Pencil size={14} /> Edit & Resubmit
+              <Pencil size={14} /> {campaign.verification_status === 'pending' ? 'Edit Campaign' : 'Edit & Resubmit'}
             </button>
           </div>
         )}

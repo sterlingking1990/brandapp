@@ -4,15 +4,12 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { 
-  Megaphone, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreVertical, 
+import {
+  Megaphone,
+  Plus,
+  MoreVertical,
   Calendar,
   Coins,
-  ArrowRight,
   Loader2,
   Video,
   ClipboardList,
@@ -22,13 +19,18 @@ import {
   Play as PlayIcon,
   RefreshCw,
   Trash2,
-  Clock
+  Zap,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
 } from 'lucide-react'
 import Toast from '@/components/Toast'
 import AnalyticsModal from '@/components/AnalyticsModal'
 
 function CampaignsContent() {
   const [campaigns, setCampaigns] = useState<any[]>([])
+  const [activationCampaigns, setActivationCampaigns] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -59,14 +61,10 @@ function CampaignsContent() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [statusPostsRes, gamesRes] = await Promise.all([
+      const [statusPostsRes, gamesRes, activationsRes] = await Promise.all([
         supabase
           .from('status_posts')
-          .select(`
-            *,
-            surveys (id),
-            challenges (id)
-          `)
+          .select(`*, surveys (id), challenges (id)`)
           .eq('brand_id', user.id)
           .eq('is_deleted', false)
           .order('created_at', { ascending: false }),
@@ -75,6 +73,11 @@ function CampaignsContent() {
           .select('*')
           .eq('brand_id', user.id)
           .eq('is_deleted', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('activation_campaigns')
+          .select('id, title, description, category, status, verification_status, price_kobo, commission_rate, total_sales_count, total_collected_kobo, created_at')
+          .eq('brand_id', user.id)
           .order('created_at', { ascending: false }),
       ])
 
@@ -96,6 +99,7 @@ function CampaignsContent() {
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
       setCampaigns(all)
+      setActivationCampaigns(activationsRes.data || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -134,10 +138,10 @@ function CampaignsContent() {
             <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand" size={40} /></div>
           ) : campaigns.length > 0 ? (
             campaigns.map((campaign) => (
-              <CampaignRow 
-                key={campaign.id} 
-                campaign={campaign} 
-                onUpdate={() => fetchCampaigns()} 
+              <CampaignRow
+                key={campaign.id}
+                campaign={campaign}
+                onUpdate={() => fetchCampaigns()}
                 onToast={(msg) => { setToastMessage(msg); setShowToast(true) }}
                 onViewAnalytics={(c) => setSelectedAnalytics(c)}
               />
@@ -150,8 +154,83 @@ function CampaignsContent() {
             </div>
           )}
         </div>
+
+        {!loading && activationCampaigns.length > 0 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <Zap size={20} className="text-brand" /> Activation Campaigns
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">WhatsApp-activated subscription campaigns sold by influencers.</p>
+            </div>
+            {activationCampaigns.map(ac => (
+              <ActivationCampaignRow key={ac.id} campaign={ac} />
+            ))}
+          </div>
+        )}
       </div>
     </>
+  )
+}
+
+function ActivationCampaignRow({ campaign }: { campaign: any }) {
+  const verificationColor: Record<string, string> = {
+    pending:           'bg-yellow-50 text-yellow-700 border-yellow-200',
+    in_review:         'bg-blue-50 text-blue-700 border-blue-200',
+    changes_requested: 'bg-orange-50 text-orange-700 border-orange-200',
+    approved:          'bg-green-50 text-green-700 border-green-200',
+  }
+  const verificationIcon: Record<string, React.ReactNode> = {
+    pending:           <Clock size={12} />,
+    in_review:         <Loader2 size={12} className="animate-spin" />,
+    changes_requested: <AlertCircle size={12} />,
+    approved:          <CheckCircle2 size={12} />,
+  }
+  const vstatus = campaign.verification_status ?? 'pending'
+  const fmt = (kobo: number) => `₦${(kobo / 100).toLocaleString('en-NG', { minimumFractionDigits: 0 })}`
+
+  return (
+    <Link
+      href={`/dashboard/campaigns/activation/${campaign.id}`}
+      className="glass-card rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-brand/30 hover:shadow-xl transition-all group border-transparent block"
+    >
+      <div className="flex gap-5">
+        <div className="h-14 w-14 rounded-2xl bg-brand/10 text-brand flex items-center justify-center flex-shrink-0">
+          <Zap size={20} />
+        </div>
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3 className="text-lg font-bold text-gray-900 group-hover:text-brand transition-colors">{campaign.title}</h3>
+            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border ${verificationColor[vstatus] ?? verificationColor.pending}`}>
+              {verificationIcon[vstatus]} {vstatus.replace('_', ' ')}
+            </span>
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-gray-100 text-gray-500">
+              {campaign.category}
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 line-clamp-1 mt-1">{campaign.description}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-8 flex-shrink-0">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Price</p>
+          <p className="text-sm font-black text-gray-900">{fmt(campaign.price_kobo)}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sales</p>
+          <p className="text-sm font-black text-gray-900">{campaign.total_sales_count ?? 0}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Collected</p>
+          <p className="text-sm font-black text-brand">{fmt(campaign.total_collected_kobo ?? 0)}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-brand text-sm font-bold flex-shrink-0">
+        View <ArrowRight size={16} />
+      </div>
+    </Link>
   )
 }
 
