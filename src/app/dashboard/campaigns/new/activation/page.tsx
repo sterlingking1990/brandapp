@@ -66,7 +66,7 @@ interface FormState {
   customMetadata: string
 }
 
-const CATEGORIES = ['health', 'education', 'finance', 'software', 'entertainment', 'other']
+const CATEGORIES = ['health', 'education', 'finance', 'software', 'entertainment', 'telecom', 'other']
 
 const FULFILMENT_TYPES = [
   {
