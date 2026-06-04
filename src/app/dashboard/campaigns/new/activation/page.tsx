@@ -68,6 +68,30 @@ interface FormState {
 
 const CATEGORIES = ['health', 'education', 'finance', 'software', 'entertainment', 'telecom', 'other']
 
+const VTU_NETWORKS = [
+  { label: 'MTN',     value: 'mtn',     dataService: 'mtn-data'      },
+  { label: 'Airtel',  value: 'airtel',  dataService: 'airtel-data'   },
+  { label: 'Glo',     value: 'glo',     dataService: 'glo-data'      },
+  { label: '9mobile', value: '9mobile', dataService: 'etisalat-data' },
+]
+
+const ELECTRICITY_DISCOS = [
+  { label: 'IKEDC — Ikeja Electric (Lagos)',      value: 'ikeja-electric'  },
+  { label: 'EKEDC — Eko Electric (Lagos)',         value: 'eko-electric'    },
+  { label: 'AEDC — Abuja Electric',               value: 'abuja-electric'  },
+  { label: 'PHED — Port Harcourt Electric',       value: 'phed'            },
+  { label: 'EEDC — Enugu Electric',               value: 'enugu-electric'  },
+  { label: 'KEDCO — Kano Electric',               value: 'kano-electric'   },
+  { label: 'BEDC — Benin Electric',               value: 'benin-electric'  },
+  { label: 'JED — Jos Electric',                  value: 'jos-electric'    },
+]
+
+const CABLE_TV_PROVIDERS = [
+  { label: 'DSTV',       value: 'dstv',       fieldLabel: 'Smartcard Number' },
+  { label: 'GOtv',       value: 'gotv',       fieldLabel: 'IUC Number'       },
+  { label: 'Startimes',  value: 'startimes',  fieldLabel: 'Smartcard Number' },
+]
+
 const FULFILMENT_TYPES = [
   {
     id: 'redirect' as FulfilmentType,
@@ -118,6 +142,19 @@ export default function NewActivationCampaignPage() {
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [customFields, setCustomFields] = useState<CustomField[]>([])
+
+  const [aiVerification, setAiVerification] = useState(true)
+
+  // VTU quick setup template state
+  const [vtuTemplate, setVtuTemplate] = useState<'airtime' | 'data' | 'electricity' | 'cable_tv' | null>(null)
+  const [vtuNetwork, setVtuNetwork] = useState('')       // airtime / data
+  const [vtuPlan, setVtuPlan] = useState('')             // data / cable_tv variation code
+  const [vtuPlans, setVtuPlans] = useState<{ variation_code: string; name: string; variation_amount: string }[]>([])
+  const [loadingPlans, setLoadingPlans] = useState(false)
+  const [vtuDisco, setVtuDisco] = useState('')           // electricity DISCO
+  const [vtuMeterType, setVtuMeterType] = useState('')   // electricity: prepaid/postpaid
+  const [vtuCableProvider, setVtuCableProvider] = useState('') // cable_tv provider
+  const [vtuApplied, setVtuApplied] = useState(false)
 
   const [form, setForm] = useState<FormState>({
     title: '',
@@ -261,7 +298,9 @@ export default function NewActivationCampaignPage() {
       if (!form.category) return 'Please select a category'
     }
     if (step === 3) {
-      if (!form.priceNgn || parseFloat(form.priceNgn) < 3000) return 'Minimum price is ₦3,000'
+      const isVtu = vtuApplied && (vtuTemplate === 'airtime' || vtuTemplate === 'data')
+      const minPrice = isVtu ? 100 : 3000
+      if (!form.priceNgn || parseFloat(form.priceNgn) < minPrice) return `Minimum price is ₦${minPrice.toLocaleString('en-NG')}`
       if (!form.commissionRate || parseFloat(form.commissionRate) < 10) return 'Minimum commission is 10%'
       if (commissionKobo + platformFeeKobo > priceKobo) return 'Commission + platform fee exceeds price'
     }
@@ -283,6 +322,86 @@ export default function NewActivationCampaignPage() {
       // brand_webhook: no sample payload required — the verification agent tests the webhook directly
     }
     return null
+  }
+
+  async function fetchVtuPlans(serviceId: string) {
+    setLoadingPlans(true)
+    setVtuPlans([])
+    setVtuPlan('')
+    try {
+      const { data } = await supabase.functions.invoke('get-vtu-plans', {
+        body: { service_id: serviceId },
+      })
+      setVtuPlans(data?.variations ?? [])
+    } catch (e) {
+      console.error('Failed to fetch VTU plans:', e)
+    } finally {
+      setLoadingPlans(false)
+    }
+  }
+
+  function applyVtuTemplate(
+    template: 'airtime' | 'data' | 'electricity' | 'cable_tv',
+    opts: { network?: string; plan?: string; disco?: string; meterType?: string; cableProvider?: string }
+  ) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const webhookUrl  = `${supabaseUrl}/functions/v1/vtu-fulfilment`
+
+    let meta: Record<string, string> = { vtu_type: template }
+    let fieldKey   = 'phone'
+    let fieldLabel = 'Phone Number to Top Up'
+    let fieldType: CustomField['type'] = 'tel'
+    let fieldPlaceholder = '08012345678'
+    let customerMessage  = ''
+
+    if (template === 'airtime') {
+      const netLabel = VTU_NETWORKS.find(n => n.value === opts.network)?.label ?? ''
+      meta = { ...meta, vtu_network: opts.network!, phone_field: 'phone' }
+      customerMessage = `Your ${netLabel} airtime will be loaded within 2 minutes of payment.`
+
+    } else if (template === 'data') {
+      const netLabel  = VTU_NETWORKS.find(n => n.value === opts.network)?.label ?? ''
+      const plan      = vtuPlans.find(p => p.variation_code === opts.plan)
+      const planLabel = plan?.name ?? opts.plan ?? ''
+      const planCost  = plan?.variation_amount ?? ''
+      meta = { ...meta, vtu_network: opts.network!, vtu_variation_code: opts.plan!, phone_field: 'phone', ...(planCost ? { vtu_amount: planCost } : {}) }
+      customerMessage = `Your ${netLabel} ${planLabel} will be loaded within 2 minutes of payment.`
+
+    } else if (template === 'electricity') {
+      const discoLabel = ELECTRICITY_DISCOS.find(d => d.value === opts.disco)?.label ?? ''
+      meta = { ...meta, vtu_service_id: opts.disco!, vtu_variation_code: opts.meterType!, phone_field: 'meter_number' }
+      fieldKey         = 'meter_number'
+      fieldLabel       = 'Meter Number'
+      fieldType        = 'text'
+      fieldPlaceholder = 'e.g. 12345678901'
+      customerMessage  = `Your ${discoLabel} electricity token will be sent to your email within 2 minutes.`
+
+    } else if (template === 'cable_tv') {
+      const provider  = CABLE_TV_PROVIDERS.find(p => p.value === opts.cableProvider)
+      const plan      = vtuPlans.find(p => p.variation_code === opts.plan)
+      const planLabel = plan?.name ?? opts.plan ?? ''
+      const planCost  = plan?.variation_amount ?? ''
+      meta = { ...meta, vtu_service_id: opts.cableProvider!, vtu_variation_code: opts.plan!, phone_field: 'smartcard_number', ...(planCost ? { vtu_amount: planCost } : {}) }
+      fieldKey         = 'smartcard_number'
+      fieldLabel       = provider?.fieldLabel ?? 'Smartcard Number'
+      fieldType        = 'text'
+      fieldPlaceholder = 'e.g. 1234567890'
+      customerMessage  = `Your ${provider?.label ?? 'cable TV'} ${planLabel} subscription will be activated within 2 minutes.`
+    }
+
+    setForm(f => ({
+      ...f,
+      fulfilmentType:  'brand_webhook',
+      webhookUrl,
+      customMetadata:  JSON.stringify(meta, null, 2),
+      customerMessage,
+      category:        f.category || 'telecom',
+    }))
+    setCustomFields([{
+      key: fieldKey, label: fieldLabel, type: fieldType,
+      required: true, placeholder: fieldPlaceholder, options: '',
+    }])
+    setVtuApplied(true)
   }
 
   async function handleTestWebhook() {
@@ -341,8 +460,8 @@ export default function NewActivationCampaignPage() {
           fulfilment_config: buildFulfilmentConfig(),
           sample_payload: buildSamplePayload(),
           learn_more_url: form.learnMoreUrl.trim() || null,
-          verification_status: 'in_review',
-          status: 'draft',
+          verification_status: aiVerification ? 'in_review' : 'approved',
+          status: aiVerification ? 'draft' : 'active',
         })
         .select('id')
         .single()
@@ -360,9 +479,11 @@ export default function NewActivationCampaignPage() {
         }
       }
 
-      // Trigger AI verification
-      supabase.functions.invoke('verify-activation-campaign', { body: { campaign_id: campaign.id } })
-        .catch(console.error) // fire and forget
+      // Trigger AI verification (only if enabled)
+      if (aiVerification) {
+        supabase.functions.invoke('verify-activation-campaign', { body: { campaign_id: campaign.id } })
+          .catch(console.error)
+      }
 
       router.push(`/dashboard/campaigns/activation/${campaign.id}?submitted=1`)
     } catch (e: any) {
@@ -528,6 +649,269 @@ export default function NewActivationCampaignPage() {
             <>
               <h2 className="font-bold text-gray-900 text-lg">Fulfilment Setup</h2>
               <p className="text-sm text-gray-500">What does the customer receive after paying?</p>
+
+              {/* ── VTU Quick Setup Templates ── */}
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Zap size={15} className="text-amber-600" />
+                  <p className="text-sm font-bold text-amber-900">Brandible VTU Quick Setup</p>
+                  <span className="text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">Optional</span>
+                </div>
+                <p className="text-xs text-amber-700">Select a template and we auto-fill the webhook, metadata and custom fields for you.</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'airtime'     as const, label: 'Airtime',      desc: 'Top up any network'    },
+                    { id: 'data'        as const, label: 'Data Bundle',  desc: 'Mobile data plans'     },
+                    { id: 'electricity' as const, label: 'Electricity',  desc: 'NEPA token top-up'     },
+                    { id: 'cable_tv'    as const, label: 'Cable TV',     desc: 'DSTV, GOtv, Startimes' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setVtuTemplate(vtuTemplate === t.id ? null : t.id)
+                        setVtuNetwork(''); setVtuPlan(''); setVtuPlans([])
+                        setVtuDisco(''); setVtuMeterType('')
+                        setVtuCableProvider('')
+                        setVtuApplied(false)
+                      }}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${vtuTemplate === t.id ? 'border-amber-500 bg-white' : 'border-amber-200 bg-white/60 hover:border-amber-400'}`}
+                    >
+                      <p className="text-sm font-bold text-gray-900">{t.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Airtime config ── */}
+                {vtuTemplate === 'airtime' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Network</label>
+                      <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuNetwork} onChange={e => { setVtuNetwork(e.target.value); setVtuApplied(false) }}>
+                        <option value="">Select network</option>
+                        {VTU_NETWORKS.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Data Bundle config ── */}
+                {vtuTemplate === 'data' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Network</label>
+                      <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuNetwork}
+                        onChange={e => {
+                          const net = VTU_NETWORKS.find(n => n.value === e.target.value)
+                          setVtuNetwork(e.target.value); setVtuApplied(false)
+                          if (net) fetchVtuPlans(net.dataService)
+                        }}>
+                        <option value="">Select network</option>
+                        {VTU_NETWORKS.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                      </select>
+                    </div>
+                    {vtuNetwork && (
+                      <div>
+                        <label className="block text-xs font-semibold text-amber-900 mb-1.5">Data Plan</label>
+                        {loadingPlans ? (
+                          <div className="flex items-center gap-2 text-amber-700 text-sm py-2">
+                            <Loader2 size={14} className="animate-spin" /> Loading plans…
+                          </div>
+                        ) : (
+                          <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            value={vtuPlan} onChange={e => { setVtuPlan(e.target.value); setVtuApplied(false) }}>
+                            <option value="">Select plan</option>
+                            {vtuPlans.map(p => <option key={p.variation_code} value={p.variation_code}>{p.name} — ₦{p.variation_amount}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Electricity config ── */}
+                {vtuTemplate === 'electricity' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Electricity Provider (DISCO)</label>
+                      <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuDisco} onChange={e => { setVtuDisco(e.target.value); setVtuApplied(false) }}>
+                        <option value="">Select DISCO</option>
+                        {ELECTRICITY_DISCOS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                    {vtuDisco && (
+                      <div>
+                        <label className="block text-xs font-semibold text-amber-900 mb-1.5">Meter Type</label>
+                        <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          value={vtuMeterType} onChange={e => { setVtuMeterType(e.target.value); setVtuApplied(false) }}>
+                          <option value="">Select meter type</option>
+                          <option value="prepaid">Prepaid</option>
+                          <option value="postpaid">Postpaid</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Cable TV config ── */}
+                {vtuTemplate === 'cable_tv' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Provider</label>
+                      <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuCableProvider}
+                        onChange={e => {
+                          setVtuCableProvider(e.target.value); setVtuApplied(false)
+                          if (e.target.value) fetchVtuPlans(e.target.value)
+                        }}>
+                        <option value="">Select provider</option>
+                        {CABLE_TV_PROVIDERS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                      </select>
+                    </div>
+                    {vtuCableProvider && (
+                      <div>
+                        <label className="block text-xs font-semibold text-amber-900 mb-1.5">Package</label>
+                        {loadingPlans ? (
+                          <div className="flex items-center gap-2 text-amber-700 text-sm py-2">
+                            <Loader2 size={14} className="animate-spin" /> Loading packages…
+                          </div>
+                        ) : (
+                          <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            value={vtuPlan} onChange={e => { setVtuPlan(e.target.value); setVtuApplied(false) }}>
+                            <option value="">Select package</option>
+                            {vtuPlans.map(p => <option key={p.variation_code} value={p.variation_code}>{p.name} — ₦{p.variation_amount}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Margin Calculator (data & cable TV — fixed plan costs) ── */}
+                {(vtuTemplate === 'data' || vtuTemplate === 'cable_tv') && vtuPlan && (() => {
+                  const plan          = vtuPlans.find(p => p.variation_code === vtuPlan)
+                  const vtpassCost    = parseFloat(plan?.variation_amount ?? '0') || 0
+                  const sellingPrice  = parseFloat(form.priceNgn) || 0
+                  const commRate      = parseFloat(form.commissionRate) || 10
+                  const grossMargin   = sellingPrice - vtpassCost
+                  const commission    = Math.floor(sellingPrice * (commRate / 100))
+                  const platformFee   = Math.floor(sellingPrice * 0.03)
+                  const netPerSale    = grossMargin - commission - platformFee
+                  const healthy       = netPerSale > 0
+                  const fmt           = (n: number) => `₦${Math.abs(n).toLocaleString('en-NG')}`
+
+                  if (!sellingPrice) return (
+                    <div className="text-xs text-amber-700 p-3 bg-amber-100/50 rounded-xl border border-amber-200">
+                      ℹ Set your selling price in Step 3 to see your margin breakdown here.
+                    </div>
+                  )
+
+                  return (
+                    <div className={`rounded-xl p-4 space-y-2 border ${healthy ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Margin Calculator</p>
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">VTpass cost</span>
+                          <span className="font-semibold text-gray-700">{fmt(vtpassCost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Your selling price</span>
+                          <span className="font-semibold text-gray-700">{fmt(sellingPrice)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                          <span className="text-gray-500">Gross margin</span>
+                          <span className={`font-bold ${grossMargin >= 0 ? 'text-gray-700' : 'text-red-600'}`}>{grossMargin < 0 ? '-' : ''}{fmt(grossMargin)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Activator commission ({commRate}%)</span>
+                          <span className="text-gray-500 font-medium">- {fmt(commission)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Platform fee (3%)</span>
+                          <span className="text-gray-500 font-medium">- {fmt(platformFee)}</span>
+                        </div>
+                        <div className={`flex justify-between border-t pt-1.5 ${healthy ? 'border-green-200' : 'border-red-200'}`}>
+                          <span className="font-bold text-gray-800">Your net per sale</span>
+                          <span className={`font-black text-base ${healthy ? 'text-green-600' : 'text-red-600'}`}>
+                            {netPerSale < 0 ? '-' : ''}{fmt(netPerSale)}
+                          </span>
+                        </div>
+                      </div>
+                      {!healthy && (
+                        <p className="text-xs text-red-600 font-semibold pt-1">
+                          ⚠ Selling price too low — increase it in Step 3 or reduce the commission rate.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── Airtime & electricity cost note ── */}
+                {(vtuTemplate === 'airtime' || vtuTemplate === 'electricity') && (vtuNetwork || vtuDisco) && (() => {
+                  const sellingPrice = parseFloat(form.priceNgn) || 0
+                  const commRate     = parseFloat(form.commissionRate) || 10
+                  if (!sellingPrice) return (
+                    <div className="text-xs text-amber-700 p-3 bg-amber-100/50 rounded-xl border border-amber-200">
+                      ℹ Set your selling price in Step 3 to see a cost breakdown here.
+                    </div>
+                  )
+                  const commission  = Math.floor(sellingPrice * (commRate / 100))
+                  const platformFee = Math.floor(sellingPrice * 0.03)
+                  const fmt         = (n: number) => `₦${n.toLocaleString('en-NG')}`
+                  return (
+                    <div className="text-xs text-amber-800 p-3 bg-amber-100/50 rounded-xl border border-amber-200 space-y-1">
+                      <p className="font-bold">💡 Pricing note</p>
+                      <p>VTpass charges the exact face value you set as the selling price. Set your price above the face value to make a margin.</p>
+                      <div className="pt-1 space-y-1">
+                        <div className="flex justify-between font-medium">
+                          <span>Activator commission ({commRate}%)</span><span>- {fmt(commission)}</span>
+                        </div>
+                        <div className="flex justify-between font-medium">
+                          <span>Platform fee (3%)</span><span>- {fmt(platformFee)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold border-t border-amber-300 pt-1">
+                          <span>Deductions per sale</span><span>- {fmt(commission + platformFee)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* ── Apply button ── */}
+                {vtuTemplate && (
+                  (() => {
+                    const ready =
+                      (vtuTemplate === 'airtime'     && vtuNetwork) ||
+                      (vtuTemplate === 'data'        && vtuNetwork && vtuPlan) ||
+                      (vtuTemplate === 'electricity' && vtuDisco && vtuMeterType) ||
+                      (vtuTemplate === 'cable_tv'    && vtuCableProvider && vtuPlan)
+                    if (!ready) return null
+                    return vtuApplied ? (
+                      <div className="flex items-center gap-2 text-green-700 text-sm p-3 bg-green-50 border border-green-200 rounded-xl">
+                        <CheckCircle2 size={15} className="shrink-0" />
+                        Template applied — webhook, metadata and custom field configured
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => applyVtuTemplate(vtuTemplate!, {
+                          network: vtuNetwork, plan: vtuPlan,
+                          disco: vtuDisco, meterType: vtuMeterType,
+                          cableProvider: vtuCableProvider,
+                        })}
+                        className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Zap size={15} /> Apply Template
+                      </button>
+                    )
+                  })()
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {FULFILMENT_TYPES.map(ft => (
@@ -794,6 +1178,24 @@ export default function NewActivationCampaignPage() {
             <>
               <h2 className="font-bold text-gray-900 text-lg">Verification</h2>
 
+              {/* AI Verification toggle */}
+              <div
+                onClick={() => setAiVerification(v => !v)}
+                className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${aiVerification ? 'border-brand bg-brand/5' : 'border-gray-200 bg-gray-50'}`}
+              >
+                <div>
+                  <p className="text-sm font-bold text-gray-900">AI Verification</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {aiVerification
+                      ? 'Campaign will be reviewed by AI agent before going live'
+                      : 'Campaign goes live immediately on submit — skip AI review'}
+                  </p>
+                </div>
+                <div className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${aiVerification ? 'bg-brand' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${aiVerification ? 'left-5' : 'left-0.5'}`} />
+                </div>
+              </div>
+
               {form.fulfilmentType === 'brand_webhook' ? (
                 <>
                   <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl">
@@ -922,7 +1324,7 @@ export default function NewActivationCampaignPage() {
               disabled={loading}
               className="flex items-center gap-2 px-6 py-3 bg-brand text-white rounded-xl text-sm font-bold disabled:opacity-60 hover:bg-brand/90 transition-colors"
             >
-              {loading ? <><Loader2 size={16} className="animate-spin" /> Submitting…</> : <><Zap size={16} /> Submit for Verification</>}
+              {loading ? <><Loader2 size={16} className="animate-spin" /> Submitting…</> : <><Zap size={16} /> {aiVerification ? 'Submit for Verification' : 'Launch Campaign'}</>}
             </button>
           )}
         </div>
