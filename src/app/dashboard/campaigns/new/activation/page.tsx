@@ -24,7 +24,7 @@ import {
 
 const STEPS = ['Basics', 'Mode', 'Pricing', 'Fulfilment', 'Verification']
 
-type FulfilmentType = 'redirect' | 'access_code' | 'file_download' | 'credentials' | 'brand_webhook'
+type FulfilmentType = 'redirect' | 'access_code' | 'file_download' | 'credentials' | 'brand_webhook' | 'bundle'
 type CampaignMode = 'open' | 'curated'
 
 interface CustomField {
@@ -92,6 +92,27 @@ const CABLE_TV_PROVIDERS = [
   { label: 'Startimes',  value: 'startimes',  fieldLabel: 'Smartcard Number' },
 ]
 
+const EDUCATION_PROVIDERS = [
+  {
+    label: 'WAEC Registration',
+    value: 'waec-registration',
+    needsPlan: true,
+    billerField: null as string | null,
+  },
+  {
+    label: 'WAEC Result Checker',
+    value: 'waec',
+    needsPlan: true,
+    billerField: null as string | null,
+  },
+  {
+    label: 'JAMB',
+    value: 'jamb',
+    needsPlan: true,
+    billerField: 'profile_id',
+  },
+]
+
 const FULFILMENT_TYPES = [
   {
     id: 'redirect' as FulfilmentType,
@@ -146,15 +167,19 @@ export default function NewActivationCampaignPage() {
   const [aiVerification, setAiVerification] = useState(true)
 
   // VTU quick setup template state
-  const [vtuTemplate, setVtuTemplate] = useState<'airtime' | 'data' | 'electricity' | 'cable_tv' | null>(null)
+  const [vtuTemplate, setVtuTemplate] = useState<'airtime' | 'data' | 'electricity' | 'cable_tv' | 'education' | 'bundle' | null>(null)
   const [vtuNetwork, setVtuNetwork] = useState('')       // airtime / data
-  const [vtuPlan, setVtuPlan] = useState('')             // data / cable_tv variation code
+  const [vtuPlan, setVtuPlan] = useState('')             // data / cable_tv / education variation code
   const [vtuPlans, setVtuPlans] = useState<{ variation_code: string; name: string; variation_amount: string }[]>([])
   const [loadingPlans, setLoadingPlans] = useState(false)
   const [vtuDisco, setVtuDisco] = useState('')           // electricity DISCO
   const [vtuMeterType, setVtuMeterType] = useState('')   // electricity: prepaid/postpaid
   const [vtuCableProvider, setVtuCableProvider] = useState('') // cable_tv provider
+  const [vtuEducationProvider, setVtuEducationProvider] = useState('') // education provider
   const [vtuApplied, setVtuApplied] = useState(false)
+  const [bundleAiInput, setBundleAiInput] = useState('')
+  const [bundleAiLoading, setBundleAiLoading] = useState(false)
+  const [bundleAiError, setBundleAiError] = useState<string | null>(null)
 
   const [form, setForm] = useState<FormState>({
     title: '',
@@ -209,6 +234,28 @@ export default function NewActivationCampaignPage() {
         return { ...base, file_url: form.fileUrl, storage_bucket: 'activation-files' }
       case 'credentials':
         return { ...base, portal_url: form.portalUrl }
+      case 'bundle': {
+        let components: unknown[] = []
+        try { components = JSON.parse(form.customMetadata || '[]') } catch { /* ignore */ }
+        const builtFields = customFields
+          .filter(f => f.key && f.label)
+          .map(f => ({
+            key: f.key,
+            label: f.label,
+            type: f.type,
+            required: f.required,
+            placeholder: f.placeholder || undefined,
+            options: f.type === 'select' && f.options
+              ? f.options.split(',').map(o => o.trim()).filter(Boolean)
+              : undefined,
+          }))
+        return {
+          ...base,
+          customer_message: form.customerMessage || 'Your bundle is being activated.',
+          components,
+          required_fields: builtFields.length ? builtFields : undefined,
+        }
+      }
       case 'brand_webhook': {
         let parsedMeta: Record<string, unknown> = {}
         try { parsedMeta = form.customMetadata ? JSON.parse(form.customMetadata) : {} } catch { /* ignore */ }
@@ -313,13 +360,19 @@ export default function NewActivationCampaignPage() {
       if (form.fulfilmentType === 'brand_webhook' && form.customMetadata) {
         try { JSON.parse(form.customMetadata) } catch { return 'Custom metadata must be valid JSON' }
       }
+      if (form.fulfilmentType === 'bundle') {
+        try {
+          const c = JSON.parse(form.customMetadata || '[]')
+          if (!Array.isArray(c) || c.length === 0) return 'Add at least one component to the bundle'
+        } catch { return 'Components JSON is invalid — check the syntax' }
+      }
     }
     if (step === 5) {
       if (form.fulfilmentType === 'redirect' && !form.sampleRedirectUrl) return 'Sample redirect URL is required'
       if (form.fulfilmentType === 'access_code' && !form.sampleCode) return 'Sample access code is required'
       if (form.fulfilmentType === 'file_download' && !form.sampleFileUrl) return 'Sample file URL is required'
       if (form.fulfilmentType === 'credentials' && !form.sampleUsername) return 'Sample username is required'
-      // brand_webhook: no sample payload required — the verification agent tests the webhook directly
+      // brand_webhook and bundle: no sample payload — verification agent tests directly
     }
     return null
   }
@@ -341,8 +394,8 @@ export default function NewActivationCampaignPage() {
   }
 
   function applyVtuTemplate(
-    template: 'airtime' | 'data' | 'electricity' | 'cable_tv',
-    opts: { network?: string; plan?: string; disco?: string; meterType?: string; cableProvider?: string }
+    template: 'airtime' | 'data' | 'electricity' | 'cable_tv' | 'education' | 'bundle',
+    opts: { network?: string; plan?: string; disco?: string; meterType?: string; cableProvider?: string; educationProvider?: string }
   ) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const webhookUrl  = `${supabaseUrl}/functions/v1/vtu-fulfilment`
@@ -387,6 +440,58 @@ export default function NewActivationCampaignPage() {
       fieldType        = 'text'
       fieldPlaceholder = 'e.g. 1234567890'
       customerMessage  = `Your ${provider?.label ?? 'cable TV'} ${planLabel} subscription will be activated within 2 minutes.`
+
+    } else if (template === 'education') {
+      const provider  = EDUCATION_PROVIDERS.find(p => p.value === opts.educationProvider)
+      const plan      = vtuPlans.find(p => p.variation_code === opts.plan)
+      const planLabel = plan?.name ?? opts.plan ?? ''
+      const planCost  = plan?.variation_amount ?? ''
+      const variationCode  = opts.plan ?? ''
+
+      meta = {
+        ...meta,
+        vtu_type:             'education',
+        vtu_service_id:       opts.educationProvider!,
+        vtu_variation_code:   variationCode,
+        phone_field:          'phone',
+        ...(provider?.billerField ? { biller_field: provider.billerField } : {}),
+        ...(planCost ? { vtu_amount: planCost } : {}),
+      }
+      fieldKey         = 'phone'
+      fieldLabel       = 'Phone Number'
+      fieldType        = 'tel'
+      fieldPlaceholder = '08012345678'
+      customerMessage  = `Your ${provider?.label ?? 'education'} ${planLabel} PIN will be delivered to your email within 2 minutes.`
+
+      // JAMB also needs Profile ID as an extra custom field
+      if (provider?.billerField) {
+        setForm(f => ({
+          ...f,
+          fulfilmentType:  'brand_webhook',
+          webhookUrl,
+          customMetadata:  JSON.stringify(meta, null, 2),
+          customerMessage,
+          category:        'education',
+        }))
+        setCustomFields([
+          { key: 'profile_id', label: 'JAMB Profile ID', type: 'text', required: true, placeholder: 'e.g. 12345678', options: '' },
+          { key: 'phone', label: 'Phone Number', type: 'tel', required: true, placeholder: '08012345678', options: '' },
+        ])
+        setVtuApplied(true)
+        return
+      }
+    }
+
+    if (template === 'bundle') {
+      setForm(f => ({
+        ...f,
+        fulfilmentType:  'bundle',
+        webhookUrl:      '',
+        customerMessage: form.customerMessage || 'Your bundle is being activated. All components will be delivered within 2 minutes.',
+        category:        f.category || 'other',
+      }))
+      setVtuApplied(true)
+      return
     }
 
     setForm(f => ({
@@ -395,13 +500,53 @@ export default function NewActivationCampaignPage() {
       webhookUrl,
       customMetadata:  JSON.stringify(meta, null, 2),
       customerMessage,
-      category:        f.category || 'telecom',
+      category:        f.category || (template === 'education' ? 'education' : 'telecom'),
     }))
     setCustomFields([{
       key: fieldKey, label: fieldLabel, type: fieldType,
       required: true, placeholder: fieldPlaceholder, options: '',
     }])
     setVtuApplied(true)
+  }
+
+  async function handleGenerateBundle() {
+    if (!bundleAiInput.trim()) return
+    setBundleAiLoading(true)
+    setBundleAiError(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('bundle-ai-generate', {
+        body: { description: bundleAiInput.trim() },
+      })
+      if (error) throw new Error(error.message)
+      if (data.error) throw new Error(data.error)
+
+      // Populate components JSON
+      if (Array.isArray(data.components)) {
+        set('customMetadata', JSON.stringify(data.components, null, 2))
+      }
+      // Populate customer message
+      if (data.customer_message) {
+        set('customerMessage', data.customer_message)
+      }
+      // Populate custom fields
+      if (Array.isArray(data.custom_fields) && data.custom_fields.length > 0) {
+        setCustomFields(data.custom_fields.map((f: any) => ({
+          key: f.key ?? '',
+          label: f.label ?? '',
+          type: f.type ?? 'text',
+          required: f.required !== false,
+          placeholder: f.placeholder ?? '',
+          options: f.options ?? '',
+        })))
+      }
+      // Mark as applied
+      set('fulfilmentType', 'bundle')
+      setVtuApplied(true)
+    } catch (e: any) {
+      setBundleAiError(e.message ?? 'Generation failed. Try again.')
+    } finally {
+      setBundleAiLoading(false)
+    }
   }
 
   async function handleTestWebhook() {
@@ -661,10 +806,12 @@ export default function NewActivationCampaignPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { id: 'airtime'     as const, label: 'Airtime',      desc: 'Top up any network'    },
-                    { id: 'data'        as const, label: 'Data Bundle',  desc: 'Mobile data plans'     },
-                    { id: 'electricity' as const, label: 'Electricity',  desc: 'NEPA token top-up'     },
-                    { id: 'cable_tv'    as const, label: 'Cable TV',     desc: 'DSTV, GOtv, Startimes' },
+                    { id: 'airtime'     as const, label: 'Airtime',      desc: 'Top up any network'         },
+                    { id: 'data'        as const, label: 'Data Bundle',  desc: 'Mobile data plans'          },
+                    { id: 'electricity' as const, label: 'Electricity',  desc: 'NEPA token top-up'          },
+                    { id: 'cable_tv'    as const, label: 'Cable TV',     desc: 'DSTV, GOtv, Startimes'      },
+                    { id: 'education'   as const, label: 'Education',    desc: 'WAEC, JAMB pin vending'     },
+                    { id: 'bundle'      as const, label: 'Bundle Pack',  desc: 'Combine multiple products'  },
                   ].map(t => (
                     <button
                       key={t.id}
@@ -674,7 +821,9 @@ export default function NewActivationCampaignPage() {
                         setVtuNetwork(''); setVtuPlan(''); setVtuPlans([])
                         setVtuDisco(''); setVtuMeterType('')
                         setVtuCableProvider('')
+                        setVtuEducationProvider('')
                         setVtuApplied(false)
+                        if (t.id !== 'bundle') set('customMetadata', '')
                       }}
                       className={`p-3 rounded-xl border-2 text-left transition-all ${vtuTemplate === t.id ? 'border-amber-500 bg-white' : 'border-amber-200 bg-white/60 hover:border-amber-400'}`}
                     >
@@ -792,6 +941,126 @@ export default function NewActivationCampaignPage() {
                   </div>
                 )}
 
+                {/* ── Education config ── */}
+                {vtuTemplate === 'education' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Provider</label>
+                      <select
+                        className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuEducationProvider}
+                        onChange={e => {
+                          const prov = EDUCATION_PROVIDERS.find(p => p.value === e.target.value)
+                          setVtuEducationProvider(e.target.value)
+                          setVtuPlan(''); setVtuPlans([])
+                          setVtuApplied(false)
+                          if (prov?.needsPlan && e.target.value) fetchVtuPlans(e.target.value)
+                        }}
+                      >
+                        <option value="">Select provider</option>
+                        {EDUCATION_PROVIDERS.map(p => (
+                          <option key={p.value} value={p.value}>{p.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {vtuEducationProvider && (() => {
+                      const prov = EDUCATION_PROVIDERS.find(p => p.value === vtuEducationProvider)
+                      if (!prov?.needsPlan) return null
+                      return (
+                        <div>
+                          <label className="block text-xs font-semibold text-amber-900 mb-1.5">Plan</label>
+                          {loadingPlans ? (
+                            <div className="flex items-center gap-2 text-amber-700 text-sm py-2">
+                              <Loader2 size={14} className="animate-spin" /> Loading plans…
+                            </div>
+                          ) : (
+                            <select
+                              className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                              value={vtuPlan}
+                              onChange={e => { setVtuPlan(e.target.value); setVtuApplied(false) }}
+                            >
+                              <option value="">Select plan</option>
+                              {vtuPlans.map(p => (
+                                <option key={p.variation_code} value={p.variation_code}>
+                                  {p.name} — ₦{p.variation_amount}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    {vtuEducationProvider === 'jamb' && (
+                      <div className="flex items-start gap-2 p-3 bg-amber-100/60 rounded-xl border border-amber-200 text-xs text-amber-800">
+                        <Info size={13} className="shrink-0 mt-0.5" />
+                        JAMB requires a <strong>Profile ID</strong> per customer. A custom field for it will be added automatically when you apply the template.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Bundle Pack config ── */}
+                {vtuTemplate === 'bundle' && (
+                  <div className="space-y-3">
+                    {/* AI generator */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-amber-900">
+                        Describe your bundle and AI will configure it
+                      </label>
+                      <textarea
+                        className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                        rows={3}
+                        placeholder='e.g. "Student pack with MTN 5GB data and WAEC result checker" or "Household pack with DSTV Compact, Ikeja electricity prepaid top-up and MTN airtime"'
+                        value={bundleAiInput}
+                        onChange={e => { setBundleAiInput(e.target.value); setBundleAiError(null) }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleGenerateBundle}
+                        disabled={!bundleAiInput.trim() || bundleAiLoading}
+                        className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                      >
+                        {bundleAiLoading
+                          ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
+                          : <><Zap size={15} /> Generate Bundle Config</>
+                        }
+                      </button>
+                      {bundleAiError && (
+                        <p className="text-xs text-red-600">{bundleAiError}</p>
+                      )}
+                    </div>
+
+                    {/* Generated / editable output */}
+                    {form.customMetadata && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-amber-900 mb-1.5">
+                            Components — review and edit if needed
+                          </label>
+                          <textarea
+                            className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
+                            rows={12}
+                            value={form.customMetadata}
+                            onChange={e => set('customMetadata', e.target.value)}
+                            spellCheck={false}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-amber-900 mb-1.5">
+                            Customer message
+                          </label>
+                          <textarea
+                            className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            rows={2}
+                            value={form.customerMessage}
+                            onChange={e => set('customerMessage', e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* ── Margin Calculator (data & cable TV — fixed plan costs) ── */}
                 {(vtuTemplate === 'data' || vtuTemplate === 'cable_tv') && vtuPlan && (() => {
                   const plan          = vtuPlans.find(p => p.variation_code === vtuPlan)
@@ -885,11 +1154,21 @@ export default function NewActivationCampaignPage() {
                 {/* ── Apply button ── */}
                 {vtuTemplate && (
                   (() => {
+                    const eduProv = EDUCATION_PROVIDERS.find(p => p.value === vtuEducationProvider)
+                    const bundleValid = (() => {
+                      if (vtuTemplate !== 'bundle') return false
+                      try {
+                        const parsed = JSON.parse(form.customMetadata || '[]')
+                        return Array.isArray(parsed) && parsed.length > 0
+                      } catch { return false }
+                    })()
                     const ready =
                       (vtuTemplate === 'airtime'     && vtuNetwork) ||
                       (vtuTemplate === 'data'        && vtuNetwork && vtuPlan) ||
                       (vtuTemplate === 'electricity' && vtuDisco && vtuMeterType) ||
-                      (vtuTemplate === 'cable_tv'    && vtuCableProvider && vtuPlan)
+                      (vtuTemplate === 'cable_tv'    && vtuCableProvider && vtuPlan) ||
+                      (vtuTemplate === 'education'   && vtuEducationProvider && (!eduProv?.needsPlan || vtuPlan)) ||
+                      bundleValid
                     if (!ready) return null
                     return vtuApplied ? (
                       <div className="flex items-center gap-2 text-green-700 text-sm p-3 bg-green-50 border border-green-200 rounded-xl">
@@ -903,6 +1182,7 @@ export default function NewActivationCampaignPage() {
                           network: vtuNetwork, plan: vtuPlan,
                           disco: vtuDisco, meterType: vtuMeterType,
                           cableProvider: vtuCableProvider,
+                          educationProvider: vtuEducationProvider,
                         })}
                         className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
                       >
