@@ -180,6 +180,8 @@ export default function NewActivationCampaignPage() {
   const [bundleAiInput, setBundleAiInput] = useState('')
   const [bundleAiLoading, setBundleAiLoading] = useState(false)
   const [bundleAiError, setBundleAiError] = useState<string | null>(null)
+  const [bundleComponentCodes, setBundleComponentCodes] = useState<Record<string, string>>({})
+  const [bundleComponentUrls, setBundleComponentUrls] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState<FormState>({
     title: '',
@@ -212,6 +214,17 @@ export default function NewActivationCampaignPage() {
 
   const set = (key: keyof FormState, value: string) => setForm(f => ({ ...f, [key]: value }))
 
+  // Derived: components from the bundle JSON that need extra input from the brand
+  const parsedBundleComponents = (() => {
+    if (form.fulfilmentType !== 'bundle') return []
+    try {
+      const parsed = JSON.parse(form.customMetadata || '[]')
+      return Array.isArray(parsed) ? parsed : []
+    } catch { return [] }
+  })()
+  const accessCodeComponents = parsedBundleComponents.filter((c: any) => c.type === 'access_code' && c.component_id)
+  const redirectComponents   = parsedBundleComponents.filter((c: any) => c.type === 'redirect' && c.component_id)
+
   const priceKobo = Math.round((parseFloat(form.priceNgn) || 0) * 100)
   const commissionKobo = Math.floor(priceKobo * (parseFloat(form.commissionRate) / 100))
   const platformFeeKobo = Math.floor(priceKobo * 0.03)
@@ -235,8 +248,15 @@ export default function NewActivationCampaignPage() {
       case 'credentials':
         return { ...base, portal_url: form.portalUrl }
       case 'bundle': {
-        let components: unknown[] = []
+        let components: any[] = []
         try { components = JSON.parse(form.customMetadata || '[]') } catch { /* ignore */ }
+        // Patch brand-provided URLs into redirect components before saving
+        components = components.map(c => {
+          if (c.type === 'redirect' && c.component_id && bundleComponentUrls[c.component_id]?.trim()) {
+            return { ...c, redirect_url: bundleComponentUrls[c.component_id].trim() }
+          }
+          return c
+        })
         const builtFields = customFields
           .filter(f => f.key && f.label)
           .map(f => ({
@@ -364,6 +384,18 @@ export default function NewActivationCampaignPage() {
         try {
           const c = JSON.parse(form.customMetadata || '[]')
           if (!Array.isArray(c) || c.length === 0) return 'Add at least one component to the bundle'
+          const missingCodes = accessCodeComponents.filter(
+            (comp: any) => !bundleComponentCodes[comp.component_id]?.trim()
+          )
+          if (missingCodes.length > 0) {
+            return `Upload codes for: ${missingCodes.map((c: any) => c.label).join(', ')}`
+          }
+          const missingUrls = redirectComponents.filter(
+            (comp: any) => !bundleComponentUrls[comp.component_id]?.trim()
+          )
+          if (missingUrls.length > 0) {
+            return `Paste the URL for: ${missingUrls.map((c: any) => c.label).join(', ')}`
+          }
         } catch { return 'Components JSON is invalid — check the syntax' }
       }
     }
@@ -614,13 +646,30 @@ export default function NewActivationCampaignPage() {
       if (insertError) throw insertError
       setCampaignId(campaign.id)
 
-      // Upload access codes if applicable
+      // Upload access codes for standard access_code campaigns
       if (form.fulfilmentType === 'access_code') {
         const codes = form.accessCodes.split(/[\n,]+/).map(c => c.trim()).filter(Boolean)
         if (codes.length) {
           const rows = codes.map(code => ({ campaign_id: campaign.id, code }))
           const { error: codeError } = await supabase.from('activation_campaign_codes').insert(rows)
           if (codeError) throw new Error(`Failed to upload codes: ${codeError.message}`)
+        }
+      }
+
+      // Upload per-component code pools for bundle access_code components
+      if (form.fulfilmentType === 'bundle' && accessCodeComponents.length > 0) {
+        for (const comp of accessCodeComponents) {
+          const raw = bundleComponentCodes[comp.component_id] ?? ''
+          const codes = raw.split(/[\n,]+/).map((c: string) => c.trim()).filter(Boolean)
+          if (codes.length) {
+            const rows = codes.map((code: string) => ({
+              campaign_id: campaign.id,
+              code,
+              component_id: comp.component_id,
+            }))
+            const { error: codeError } = await supabase.from('activation_campaign_codes').insert(rows)
+            if (codeError) throw new Error(`Failed to upload codes for ${comp.label}: ${codeError.message}`)
+          }
         }
       }
 
@@ -1056,6 +1105,74 @@ export default function NewActivationCampaignPage() {
                             onChange={e => set('customerMessage', e.target.value)}
                           />
                         </div>
+
+                        {/* Per-component redirect URLs */}
+                        {redirectComponents.length > 0 && (
+                          <div className="space-y-3 pt-1">
+                            <div className="flex items-center gap-2">
+                              <Link2 size={14} className="text-amber-700" />
+                              <p className="text-xs font-bold text-amber-900">Redirect URLs</p>
+                            </div>
+                            <p className="text-xs text-amber-700">
+                              Customers are sent to these links immediately after payment. Paste the URL for each product below.
+                            </p>
+                            {redirectComponents.map((comp: any) => (
+                              <div key={comp.component_id} className="bg-white border border-amber-300 rounded-xl p-3 space-y-2">
+                                <p className="text-xs font-semibold text-gray-800">{comp.label}</p>
+                                <input
+                                  type="url"
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                  placeholder="https://..."
+                                  value={bundleComponentUrls[comp.component_id] ?? ''}
+                                  onChange={e => setBundleComponentUrls(prev => ({
+                                    ...prev,
+                                    [comp.component_id]: e.target.value,
+                                  }))}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Per-component code pools for access_code type components */}
+                        {accessCodeComponents.length > 0 && (
+                          <div className="space-y-3 pt-1">
+                            <div className="flex items-center gap-2">
+                              <KeyRound size={14} className="text-amber-700" />
+                              <p className="text-xs font-bold text-amber-900">Upload Access Codes</p>
+                            </div>
+                            <p className="text-xs text-amber-700">
+                              These components deliver unique codes to each customer. Paste one code per line for each product below.
+                            </p>
+                            {accessCodeComponents.map((comp: any) => {
+                              const count = (bundleComponentCodes[comp.component_id] ?? '')
+                                .split(/[\n,]+/).filter((c: string) => c.trim()).length
+                              return (
+                                <div key={comp.component_id} className="bg-white border border-amber-300 rounded-xl p-3 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-gray-800">{comp.label}</p>
+                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                                      {count} code{count !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                  <textarea
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                                    rows={4}
+                                    placeholder={'CODE001\nCODE002\nCODE003'}
+                                    value={bundleComponentCodes[comp.component_id] ?? ''}
+                                    onChange={e => setBundleComponentCodes(prev => ({
+                                      ...prev,
+                                      [comp.component_id]: e.target.value,
+                                    }))}
+                                  />
+                                  {comp.redemption_url && (
+                                    <p className="text-[10px] text-gray-400">Redeemed at: {comp.redemption_url}</p>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
