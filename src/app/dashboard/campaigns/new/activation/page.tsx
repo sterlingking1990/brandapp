@@ -22,7 +22,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
-const STEPS = ['Basics', 'Mode', 'Pricing', 'Fulfilment', 'Verification']
+const STEPS = ['Basics', 'Mode', 'Fulfilment', 'Pricing', 'Verification']
 
 type FulfilmentType = 'redirect' | 'access_code' | 'file_download' | 'credentials' | 'brand_webhook' | 'bundle'
 type CampaignMode = 'open' | 'curated'
@@ -182,6 +182,7 @@ export default function NewActivationCampaignPage() {
   const [bundleAiError, setBundleAiError] = useState<string | null>(null)
   const [bundleComponentCodes, setBundleComponentCodes] = useState<Record<string, string>>({})
   const [bundleComponentUrls, setBundleComponentUrls] = useState<Record<string, string>>({})
+  const [bundlePartnerCosts, setBundlePartnerCosts] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState<FormState>({
     title: '',
@@ -365,13 +366,7 @@ export default function NewActivationCampaignPage() {
       if (!form.category) return 'Please select a category'
     }
     if (step === 3) {
-      const isVtu = vtuApplied && (vtuTemplate === 'airtime' || vtuTemplate === 'data')
-      const minPrice = isVtu ? 100 : 3000
-      if (!form.priceNgn || parseFloat(form.priceNgn) < minPrice) return `Minimum price is ₦${minPrice.toLocaleString('en-NG')}`
-      if (!form.commissionRate || parseFloat(form.commissionRate) < 10) return 'Minimum commission is 10%'
-      if (commissionKobo + platformFeeKobo > priceKobo) return 'Commission + platform fee exceeds price'
-    }
-    if (step === 4) {
+      // Step 3 is now Fulfilment
       if (form.fulfilmentType === 'redirect' && !form.redirectUrl) return 'Redirect URL is required'
       if (form.fulfilmentType === 'access_code' && !form.accessCodes.trim()) return 'Paste at least one access code'
       if (form.fulfilmentType === 'file_download' && !form.fileUrl) return 'Upload a file first'
@@ -398,6 +393,14 @@ export default function NewActivationCampaignPage() {
           }
         } catch { return 'Components JSON is invalid — check the syntax' }
       }
+    }
+    if (step === 4) {
+      // Step 4 is now Pricing — brand has seen actual costs in Step 3
+      const isVtu = vtuApplied && (vtuTemplate === 'airtime' || vtuTemplate === 'data')
+      const minPrice = isVtu ? 100 : 3000
+      if (!form.priceNgn || parseFloat(form.priceNgn) < minPrice) return `Minimum price is ₦${minPrice.toLocaleString('en-NG')}`
+      if (!form.commissionRate || parseFloat(form.commissionRate) < 10) return 'Minimum commission is 10%'
+      if (commissionKobo + platformFeeKobo > priceKobo) return 'Commission + platform fee exceeds price'
     }
     if (step === 5) {
       if (form.fulfilmentType === 'redirect' && !form.sampleRedirectUrl) return 'Sample redirect URL is required'
@@ -795,10 +798,50 @@ export default function NewActivationCampaignPage() {
             </>
           )}
 
-          {/* ── Step 3: Pricing ── */}
+          {/* ── Step 3: Fulfilment ── */}
           {step === 3 && (
             <>
+              <h2 className="font-bold text-gray-900 text-lg">Fulfilment Setup</h2>
+              <p className="text-sm text-gray-500">What does the customer receive after paying?</p>
+            </>
+          )}
+
+          {/* ── Step 4: Pricing ── */}
+          {step === 4 && (
+            <>
               <h2 className="font-bold text-gray-900 text-lg">Pricing & Commission</h2>
+
+              {/* Cost context — shows what the brand now knows from Step 3 */}
+              {(() => {
+                // VTU single plan (data or cable_tv with fixed cost)
+                if ((vtuTemplate === 'data' || vtuTemplate === 'cable_tv') && vtuPlan) {
+                  const plan = vtuPlans.find(p => p.variation_code === vtuPlan)
+                  if (plan) return (
+                    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm">
+                      <span className="text-blue-700 font-medium">{plan.name} — VTpass cost</span>
+                      <span className="font-black text-blue-900">₦{parseFloat(plan.variation_amount).toLocaleString('en-NG')}</span>
+                    </div>
+                  )
+                }
+                // Bundle — show floor cost summary
+                if (form.fulfilmentType === 'bundle' && parsedBundleComponents.length > 0) {
+                  const vtuFloor = parsedBundleComponents
+                    .filter((c: any) => c.type === 'vtu')
+                    .reduce((s: number, c: any) => s + (parseFloat(c.metadata?.vtu_amount ?? '0') || 0), 0)
+                  const partnerFloor = parsedBundleComponents
+                    .filter((c: any) => c.type === 'access_code' && c.component_id)
+                    .reduce((s: number, c: any) => s + (parseFloat(bundlePartnerCosts[c.component_id] ?? '0') || 0), 0)
+                  const floorNgn = vtuFloor + partnerFloor
+                  if (floorNgn > 0) return (
+                    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm">
+                      <span className="text-blue-700 font-medium">Bundle floor cost (from Step 3)</span>
+                      <span className="font-black text-blue-900">₦{floorNgn.toLocaleString('en-NG')}</span>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
               <div>
                 <label className={labelClass}>Customer Price (₦)</label>
                 <input type="number" min="3000" className={inputClass} placeholder="Minimum ₦3,000" value={form.priceNgn} onChange={e => set('priceNgn', e.target.value)} />
@@ -810,7 +853,7 @@ export default function NewActivationCampaignPage() {
                 <p className="text-xs text-gray-400 mt-1">Minimum 10% — higher rates attract more activators</p>
               </div>
               <div>
-                <label className={labelClass}>Max Activators (optional)</label>
+                <label className={labelClass}>Max Activators <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input type="number" min="1" className={inputClass} placeholder="Leave blank for unlimited" value={form.maxActivators} onChange={e => set('maxActivators', e.target.value)} />
               </div>
 
@@ -838,12 +881,9 @@ export default function NewActivationCampaignPage() {
             </>
           )}
 
-          {/* ── Step 4: Fulfilment ── */}
-          {step === 4 && (
+          {/* ── Step 3 continued: Fulfilment config ── */}
+          {step === 3 && (
             <>
-              <h2 className="font-bold text-gray-900 text-lg">Fulfilment Setup</h2>
-              <p className="text-sm text-gray-500">What does the customer receive after paying?</p>
-
               {/* ── VTU Quick Setup Templates ── */}
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-4">
                 <div className="flex items-center gap-2">
@@ -1105,6 +1145,122 @@ export default function NewActivationCampaignPage() {
                             onChange={e => set('customerMessage', e.target.value)}
                           />
                         </div>
+
+                        {/* Bundle Cost & Suggested Pricing */}
+                        {(() => {
+                          const vtuComps    = parsedBundleComponents.filter((c: any) => c.type === 'vtu')
+                          const acComps     = parsedBundleComponents.filter((c: any) => c.type === 'access_code' && c.component_id)
+                          const rdComps     = parsedBundleComponents.filter((c: any) => c.type === 'redirect')
+                          const vtuFloor    = vtuComps.reduce((sum: number, c: any) => sum + (parseFloat(c.metadata?.vtu_amount ?? '0') || 0), 0)
+                          const partnerFloor = acComps.reduce((sum: number, c: any) => sum + (parseFloat(bundlePartnerCosts[c.component_id] ?? '0') || 0), 0)
+                          const floorNgn    = vtuFloor + partnerFloor
+                          const commRate    = parseFloat(form.commissionRate) || 20
+                          // price that yields 10% net margin above floor cost after commission + platform fee
+                          const rawSuggested = floorNgn > 0 ? (floorNgn * 1.10) / (1 - commRate / 100 - 0.03) : 0
+                          const suggestedNgn = rawSuggested > 0 ? Math.ceil(rawSuggested / 100) * 100 : 0
+                          const currentPrice = parseFloat(form.priceNgn) || 0
+                          const netPerSale   = currentPrice > 0 && floorNgn > 0
+                            ? currentPrice * (1 - commRate / 100 - 0.03) - floorNgn
+                            : null
+                          const fmtN = (n: number) => `₦${Math.abs(n).toLocaleString('en-NG')}`
+
+                          return (
+                            <div className="border border-amber-300 rounded-xl overflow-hidden">
+                              <div className="bg-amber-50 px-4 py-2.5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-800">Bundle Cost &amp; Pricing</p>
+                              </div>
+                              <div className="p-4 space-y-3 bg-white">
+                                {/* Per-component cost rows */}
+                                <div className="space-y-2">
+                                  {vtuComps.map((c: any, i: number) => {
+                                    const cost = parseFloat(c.metadata?.vtu_amount ?? '0') || 0
+                                    return (
+                                      <div key={i} className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-600">{c.label}</span>
+                                        <span className="text-xs font-semibold text-gray-800">{cost > 0 ? fmtN(cost) : '—'}</span>
+                                      </div>
+                                    )
+                                  })}
+                                  {acComps.map((c: any) => (
+                                    <div key={c.component_id} className="flex items-center justify-between gap-3">
+                                      <span className="text-xs text-gray-600 flex-1">{c.label}</span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs text-gray-400">₦</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                          placeholder="your cost"
+                                          value={bundlePartnerCosts[c.component_id] ?? ''}
+                                          onChange={e => setBundlePartnerCosts(prev => ({ ...prev, [c.component_id]: e.target.value }))}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {rdComps.map((c: any, i: number) => (
+                                    <div key={i} className="flex items-center justify-between">
+                                      <span className="text-xs text-gray-600">{c.label}</span>
+                                      <span className="text-[10px] text-gray-400 italic">redirect — enter your cost if any</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Floor cost total */}
+                                <div className="flex justify-between items-center border-t border-gray-100 pt-2">
+                                  <span className="text-xs font-bold text-gray-700">Total floor cost</span>
+                                  <span className="text-sm font-black text-gray-900">{fmtN(floorNgn)}</span>
+                                </div>
+
+                                {/* Commission — editable here, synced to Step 3 */}
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs text-gray-500 flex-1">Activator commission</span>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="10"
+                                      max="80"
+                                      className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                      value={form.commissionRate}
+                                      onChange={e => set('commissionRate', e.target.value)}
+                                    />
+                                    <span className="text-xs text-gray-400">%</span>
+                                  </div>
+                                </div>
+
+                                {/* Suggested price */}
+                                {suggestedNgn > 0 && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div>
+                                        <p className="text-xs font-bold text-amber-900">Suggested selling price</p>
+                                        <p className="text-[10px] text-amber-700">Covers costs + {form.commissionRate}% commission + 3% fee + 10% net margin</p>
+                                      </div>
+                                      <span className="text-lg font-black text-amber-700 shrink-0">{fmtN(suggestedNgn)}</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => set('priceNgn', String(suggestedNgn))}
+                                      className="w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors"
+                                    >
+                                      Apply {fmtN(suggestedNgn)} as selling price
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Net per sale at current price */}
+                                {netPerSale !== null && (
+                                  <div className={`flex justify-between items-center rounded-lg px-3 py-2 text-xs font-semibold ${netPerSale >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                    <span>Your net per sale at {fmtN(currentPrice)}</span>
+                                    <span className="font-black">{netPerSale < 0 ? '-' : ''}{fmtN(netPerSale)}</span>
+                                  </div>
+                                )}
+                                {netPerSale !== null && netPerSale < 0 && (
+                                  <p className="text-xs text-red-600 font-semibold">⚠ Selling price too low — you'll lose money on each sale.</p>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
 
                         {/* Per-component redirect URLs */}
                         {redirectComponents.length > 0 && (
