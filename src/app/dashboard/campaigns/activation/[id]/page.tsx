@@ -39,6 +39,7 @@ interface Campaign {
   total_collected_kobo: number
   total_sales_count: number
   created_at: string
+  is_group_buy: boolean
 }
 
 interface Activator {
@@ -48,6 +49,7 @@ interface Activator {
   dva_bank_name: string | null
   dva_account_name: string | null
   dva_status: string
+  is_group_buy_default: boolean
   total_payments_count: number
   total_commission_earned: number
   status: string
@@ -113,6 +115,23 @@ export default function ActivationCampaignDashboard({ params }: { params: { id: 
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [expandedApp, setExpandedApp] = useState<string | null>(null)
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null)
+
+  async function setGroupBuyDefault(activatorRowId: string) {
+    setSettingDefaultId(activatorRowId)
+    try {
+      const { data, error } = await supabase.functions.invoke('set-group-buy-default', {
+        body: { activator_row_id: activatorRowId, campaign_id: id },
+      })
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error ?? 'Failed to set default')
+      setActivators(prev => prev.map(a => ({ ...a, is_group_buy_default: a.id === activatorRowId })))
+    } catch (e: any) {
+      alert('Could not set default: ' + e.message)
+    } finally {
+      setSettingDefaultId(null)
+    }
+  }
 
   const justSubmitted = searchParams.get('submitted') === '1'
 
@@ -452,7 +471,12 @@ export default function ActivationCampaignDashboard({ params }: { params: { id: 
                   {activators.map(a => (
                     <div key={a.id} className="p-4 flex items-center gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{a.profiles.full_name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900 truncate">{a.profiles.full_name}</p>
+                          {campaign?.is_group_buy && a.is_group_buy_default && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 shrink-0">Group Buy Default</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 truncate">
                           @{a.profiles.username}
                           {a.dva_account_number && <> · DVA: {a.dva_bank_name} {a.dva_account_number}</>}
@@ -462,7 +486,16 @@ export default function ActivationCampaignDashboard({ params }: { params: { id: 
                         <p className="text-sm font-bold text-gray-900">{a.total_payments_count} sales</p>
                         <p className="text-xs text-green-600">₦{a.total_commission_earned.toLocaleString()} earned</p>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${a.dva_status === 'active' ? 'bg-green-100 text-green-700' : a.dva_status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {campaign?.is_group_buy && !a.is_group_buy_default && a.dva_status === 'active' && (
+                        <button
+                          onClick={() => setGroupBuyDefault(a.id)}
+                          disabled={settingDefaultId === a.id}
+                          className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 disabled:opacity-50 transition-colors"
+                        >
+                          {settingDefaultId === a.id ? '...' : 'Set Default'}
+                        </button>
+                      )}
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${a.dva_status === 'active' ? 'bg-green-100 text-green-700' : a.dva_status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
                         {a.dva_status}
                       </span>
                     </div>

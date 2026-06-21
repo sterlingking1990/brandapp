@@ -177,6 +177,7 @@ export default function NewActivationCampaignPage() {
   const [vtuCableProvider, setVtuCableProvider] = useState('') // cable_tv provider
   const [vtuEducationProvider, setVtuEducationProvider] = useState('') // education provider
   const [vtuApplied, setVtuApplied] = useState(false)
+  const [isGroupBuy, setIsGroupBuy] = useState(false)
   const [bundleAiInput, setBundleAiInput] = useState('')
   const [bundleAiLoading, setBundleAiLoading] = useState(false)
   const [bundleAiError, setBundleAiError] = useState<string | null>(null)
@@ -399,7 +400,7 @@ export default function NewActivationCampaignPage() {
       const isVtu = vtuApplied && (vtuTemplate === 'airtime' || vtuTemplate === 'data')
       const minPrice = isVtu ? 100 : 3000
       if (!form.priceNgn || parseFloat(form.priceNgn) < minPrice) return `Minimum price is ₦${minPrice.toLocaleString('en-NG')}`
-      if (!form.commissionRate || parseFloat(form.commissionRate) < 10) return 'Minimum commission is 10%'
+      if (!form.commissionRate || parseFloat(form.commissionRate) < 3) return 'Minimum commission is 3%'
       if (commissionKobo + platformFeeKobo > priceKobo) return 'Commission + platform fee exceeds price'
     }
     if (step === 5) {
@@ -429,7 +430,7 @@ export default function NewActivationCampaignPage() {
   }
 
   function applyVtuTemplate(
-    template: 'airtime' | 'data' | 'electricity' | 'cable_tv' | 'education' | 'bundle',
+    template: 'airtime' | 'data' | 'electricity' | 'cable_tv' | 'education' | 'bundle' | 'group_buy',
     opts: { network?: string; plan?: string; disco?: string; meterType?: string; cableProvider?: string; educationProvider?: string }
   ) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -525,6 +526,33 @@ export default function NewActivationCampaignPage() {
         customerMessage: form.customerMessage || 'Your bundle is being activated. All components will be delivered within 2 minutes.',
         category:        f.category || 'other',
       }))
+      setVtuApplied(true)
+      return
+    }
+
+    if (template === 'group_buy') {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const netLabel    = VTU_NETWORKS.find(n => n.value === opts.network)?.label ?? ''
+      const plan        = vtuPlans.find(p => p.variation_code === opts.plan)
+      const planLabel   = plan?.name ?? opts.plan ?? ''
+      const planCost    = plan?.variation_amount ?? ''
+      setIsGroupBuy(true)
+      setForm(f => ({
+        ...f,
+        fulfilmentType:  'brand_webhook',
+        webhookUrl:      `${supabaseUrl}/functions/v1/vtu-fulfilment`,
+        customMetadata:  JSON.stringify({
+          vtu_type:             'data',
+          vtu_network:          opts.network!,
+          vtu_variation_code:   opts.plan!,
+          phone_field:          'phone',
+          ...(planCost ? { vtu_amount: planCost } : {}),
+        }, null, 2),
+        customerMessage: `Your group data purchase is confirmed. Each number will receive their ${netLabel} ${planLabel} within 2 minutes.`,
+        category:        'telecom',
+        commissionRate:  '3',
+      }))
+      setCustomFields([{ key: 'phone', label: 'Phone Number to Top Up', type: 'tel', required: true, placeholder: '08012345678', options: '' }])
       setVtuApplied(true)
       return
     }
@@ -634,7 +662,8 @@ export default function NewActivationCampaignPage() {
           campaign_mode: form.mode,
           price_kobo: priceKobo,
           commission_rate: parseFloat(form.commissionRate),
-          platform_fee_rate: 3.0,
+          platform_fee_rate: isGroupBuy ? 1.5 : 3.0,
+          is_group_buy: isGroupBuy,
           max_activators: form.maxActivators ? parseInt(form.maxActivators) : null,
           fulfilment_type: form.fulfilmentType,
           fulfilment_config: buildFulfilmentConfig(),
@@ -849,8 +878,8 @@ export default function NewActivationCampaignPage() {
               </div>
               <div>
                 <label className={labelClass}>Activator Commission (%)</label>
-                <input type="number" min="10" max="80" className={inputClass} placeholder="Minimum 10%" value={form.commissionRate} onChange={e => set('commissionRate', e.target.value)} />
-                <p className="text-xs text-gray-400 mt-1">Minimum 10% — higher rates attract more activators</p>
+                <input type="number" min="3" max="80" className={inputClass} placeholder="Minimum 3%" value={form.commissionRate} onChange={e => set('commissionRate', e.target.value)} />
+                <p className="text-xs text-gray-400 mt-1">Minimum 3% — higher rates attract more activators</p>
               </div>
               <div>
                 <label className={labelClass}>Max Activators <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -901,6 +930,7 @@ export default function NewActivationCampaignPage() {
                     { id: 'cable_tv'    as const, label: 'Cable TV',     desc: 'DSTV, GOtv, Startimes'      },
                     { id: 'education'   as const, label: 'Education',    desc: 'WAEC, JAMB pin vending'     },
                     { id: 'bundle'      as const, label: 'Bundle Pack',  desc: 'Combine multiple products'  },
+                    { id: 'group_buy'   as const, label: 'Group Buy',    desc: 'Many numbers, one payment'  },
                   ].map(t => (
                     <button
                       key={t.id}
@@ -1334,6 +1364,52 @@ export default function NewActivationCampaignPage() {
                   </div>
                 )}
 
+                {/* ── Group Buy config ── */}
+                {vtuTemplate === 'group_buy' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1.5">Network</label>
+                      <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={vtuNetwork}
+                        onChange={e => {
+                          const net = VTU_NETWORKS.find(n => n.value === e.target.value)
+                          setVtuNetwork(e.target.value); setVtuApplied(false)
+                          if (net) fetchVtuPlans(net.dataService)
+                        }}>
+                        <option value="">Select network</option>
+                        {VTU_NETWORKS.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                      </select>
+                    </div>
+                    {vtuNetwork && (
+                      <div>
+                        <label className="block text-xs font-semibold text-amber-900 mb-1.5">Data Plan (10 GB minimum)</label>
+                        {loadingPlans ? (
+                          <div className="flex items-center gap-2 text-amber-700 text-sm py-2">
+                            <Loader2 size={14} className="animate-spin" /> Loading plans…
+                          </div>
+                        ) : (
+                          <select className="w-full border border-amber-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            value={vtuPlan} onChange={e => { setVtuPlan(e.target.value); setVtuApplied(false) }}>
+                            <option value="">Select plan</option>
+                            {vtuPlans
+                              .filter(p => { const m = p.name.match(/(\d+(?:\.\d+)?)\s*gb/i); return m && parseFloat(m[1]) >= 10 })
+                              .map(p => <option key={p.variation_code} value={p.variation_code}>{p.name} — ₦{p.variation_amount}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2 p-3 bg-amber-100/60 rounded-xl border border-amber-200 text-xs text-amber-800">
+                      <Info size={13} className="shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p><strong>Group Buy rules:</strong></p>
+                        <p>• Commission is fixed at <strong>3%</strong>, platform fee at <strong>1.5%</strong></p>
+                        <p>• After creating the campaign, go to the campaign page and mark one activator as the <strong>Group Buy Default</strong> — their account number will be used for all group buy payments</p>
+                        <p>• Only plans 10 GB and above qualify</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Margin Calculator (data & cable TV — fixed plan costs) ── */}
                 {(vtuTemplate === 'data' || vtuTemplate === 'cable_tv') && vtuPlan && (() => {
                   const plan          = vtuPlans.find(p => p.variation_code === vtuPlan)
@@ -1435,13 +1511,14 @@ export default function NewActivationCampaignPage() {
                         return Array.isArray(parsed) && parsed.length > 0
                       } catch { return false }
                     })()
+                    const groupBuyValid = vtuTemplate === 'group_buy' && vtuNetwork && vtuPlan
                     const ready =
                       (vtuTemplate === 'airtime'     && vtuNetwork) ||
                       (vtuTemplate === 'data'        && vtuNetwork && vtuPlan) ||
                       (vtuTemplate === 'electricity' && vtuDisco && vtuMeterType) ||
                       (vtuTemplate === 'cable_tv'    && vtuCableProvider && vtuPlan) ||
                       (vtuTemplate === 'education'   && vtuEducationProvider && (!eduProv?.needsPlan || vtuPlan)) ||
-                      bundleValid
+                      bundleValid || groupBuyValid
                     if (!ready) return null
                     return vtuApplied ? (
                       <div className="flex items-center gap-2 text-green-700 text-sm p-3 bg-green-50 border border-green-200 rounded-xl">
